@@ -1,6 +1,6 @@
 import requests
 import json
-
+from classifier import ProjectClassifier
 
 class RegulationAPI:
     def __init__(self):
@@ -95,6 +95,15 @@ class RegulationAPI:
             print(f"\n{i}. 🆔 ID: {project_id}")
 
             title = p.get('title', '').strip()
+            # Определяем тематику
+            topics = ProjectClassifier.classify(
+                title=p.get('title', ''),
+                department=p.get('developedDepartment', {}).get('description', '')
+            )
+
+            # Выводим тематику рядом с проектом
+            topic_str = ProjectClassifier.format_topics(topics)
+            print(f"   🎯 {topic_str}")
             if title:
                 title = title[:100] + '...' if len(title) > 100 else title
                 print(f"   📌 {title}")
