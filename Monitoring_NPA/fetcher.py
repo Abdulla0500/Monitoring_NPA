@@ -32,6 +32,7 @@ class RegulationAPI:
                 "title", "developedDepartment", "projectId", "projectType",
                 "creationDate", "publicationDate", "stage", "status", "procedure"
             ]
+
         }
 
         try:
