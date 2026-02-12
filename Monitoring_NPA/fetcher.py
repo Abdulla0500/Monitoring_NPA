@@ -33,6 +33,7 @@ class RegulationAPI:
                 "creationDate", "publicationDate", "stage", "status", "procedure"
             ]
 
+
         }
 
         try:
