@@ -2,6 +2,7 @@ import requests
 import json
 from classifier import ProjectClassifier
 
+
 class RegulationAPI:
     def __init__(self):
         self.session = requests.Session()
@@ -17,7 +18,6 @@ class RegulationAPI:
 
     def fetch_projects(self, page=1, pageSize=20):
         """Загружает одну страницу проектов"""
-
         url = "https://regulation.gov.ru/api/public/PublicProjects/GetFiltered"
 
         payload = {
@@ -32,8 +32,6 @@ class RegulationAPI:
                 "title", "developedDepartment", "projectId", "projectType",
                 "creationDate", "publicationDate", "stage", "status", "procedure"
             ]
-
-
         }
 
         try:
@@ -52,9 +50,18 @@ class RegulationAPI:
             print(f"   ❌ Ошибка: {e}")
             return []
 
-    def fetch_all_projects(self, max_pages=20):
-        """Загружает ВСЕ доступные страницы"""
+    def wrap_text(self, text, width=60):
+        """Разбивает текст на строки по width символов"""
+        if not text:
+            return text
 
+        lines = []
+        for i in range(0, len(text), width):
+            lines.append(text[i:i + width])
+        return '\n'.join(lines)
+
+    def fetch_all_projects(self, max_pages=500):
+        """Загружает ВСЕ доступные страницы"""
         print("=" * 70)
         print("🚀 ЗАГРУЗКА ВСЕХ ПРОЕКТОВ")
         print("=" * 70)
@@ -81,91 +88,119 @@ class RegulationAPI:
 
         return projects_list
 
-    def print_projects_with_links(self, projects, limit=5):
-        """Показывает проекты с АКТИВНЫМИ ссылками"""
-
-        print("\n📌 ПЕРВЫЕ 5 ПРОЕКТОВ С ССЫЛКАМИ:")
-        print("=" * 70)
-
-        for i, p in enumerate(projects[:limit], 1):
-            project_id = p.get('id')
-            # ФОРМИРУЕМ ССЫЛКУ
-            url = f"https://regulation.gov.ru/projects#npa={project_id}"
-
-            print(f"\n{i}. 🆔 ID: {project_id}")
-
-            title = p.get('title', '').strip()
-            # Определяем тематику
+    def print_projects(self, projects, limit=10, filter_topic=None):
+        """
+        Показывает проекты (только нужная информация)
+        filter_topic: если указан, показывает только проекты этой темы
+        Проекты сортируются по дате публикации (сначала новые)
+        """
+        # Фильтруем проекты, если нужно
+        filtered_projects = []
+        for p in projects:
             topics = ProjectClassifier.classify(
                 title=p.get('title', ''),
                 department=p.get('developedDepartment', {}).get('description', '')
             )
 
-            # Выводим тематику рядом с проектом
-            topic_str = ProjectClassifier.format_topics(topics)
-            print(f"   🎯 {topic_str}")
-            if title:
-                title = title[:100] + '...' if len(title) > 100 else title
-                print(f"   📌 {title}")
+            if filter_topic:
+                if filter_topic in topics:
+                    filtered_projects.append(p)
+            else:
+                filtered_projects.append(p)
 
+        if filter_topic and not filtered_projects:
+            print(f"\n❌ Проектов с темой {ProjectClassifier.get_topic_name(filter_topic)} не найдено")
+            return
+
+        # ===== ВАЖНО: СОРТИРУЕМ ПО ДАТЕ (СНАЧАЛА НОВЫЕ) =====
+        def get_date(project):
+            """Извлекает дату для сортировки"""
+            date = project.get('publicationDate') or project.get('creationDate', '')
+            return date if date else '0000-00-00'  # проекты без даты в конец
+
+        filtered_projects.sort(key=get_date, reverse=True)  # reverse=True = новые сверху
+
+        # Заголовок
+        if filter_topic:
+            topic_name = ProjectClassifier.get_topic_name(filter_topic)
+            print(
+                f"\n📌 ПОКАЗАНО {min(len(filtered_projects), limit)} ИЗ {len(filtered_projects)} ПРОЕКТОВ ПО ТЕМЕ {topic_name}")
+        else:
+            print(
+                f"\n📌 ПОКАЗАНО {min(len(filtered_projects), limit)} ИЗ {len(filtered_projects)} ПРОЕКТОВ (ВСЕ ТЕМЫ)")
+        print(f"   ⏱️  Сортировка: сначала новые")
+        print("=" * 70)
+
+        # Выводим проекты
+        for i, p in enumerate(filtered_projects[:limit], 1):
+            project_id = p.get('id')
+            url = f"https://regulation.gov.ru/projects#npa={project_id}"
+            title = p.get('title', '').strip()
             dept = p.get('developedDepartment', {}).get('description', '')
-            if dept:
-                print(f"   🏢 {dept}")
-
             date = p.get('publicationDate') or p.get('creationDate', '')
-            if date:
-                print(f"   📅 {date[:10]}")
 
+            # Определяем тематику
+            topics = ProjectClassifier.classify(title, dept)
+            topic_str = ProjectClassifier.format_topics(topics)
 
-            print(f"   🔍 Перейти: {url}")  # дублирую для наглядности
-
-    def print_statistics(self, projects):
-        """Показывает статистику по проектам"""
-
-        print("\n📊 СТАТИСТИКА ПО ВЕДОМСТВАМ:")
-        print("-" * 70)
-
-        dept_stats = {}
-        for p in projects:
-            dept = p.get('developedDepartment', {}).get('description', 'Не указано')
-            dept_stats[dept] = dept_stats.get(dept, 0) + 1
-
-        for dept, count in sorted(dept_stats.items(), key=lambda x: x[1], reverse=True)[:15]:
-            print(f"   {dept}: {count} проектов")
-
-        print("\n📅 ПРОЕКТЫ ПО ДАТАМ:")
-        print("-" * 70)
-
-        date_stats = {}
-        for p in projects:
-            date = p.get('publicationDate') or p.get('creationDate', '')
-            if date:
-                date = date[:10]
-                date_stats[date] = date_stats.get(date, 0) + 1
-
-        for date, count in sorted(date_stats.items(), reverse=True)[:10]:
-            print(f"   {date}: {count} проектов")
+            print(f"\n{i}. 🆔 {project_id} {topic_str}")
+            print(f"   📌 {self.wrap_text(title, 70)}")
+            print(f"   🏢 {dept}")
+            print(f"   📅 {date[:10] if date else 'Нет даты'}")
+            print(f"   🔗 {url}")
 
 
 # ============= ЗАПУСК =============
 if __name__ == "__main__":
     api = RegulationAPI()
 
-    # Загружаем ВСЕ страницы
-    projects = api.fetch_all_projects(max_pages=50)
+    # Загружаем проекты (ОДИН РАЗ)
+    projects = api.fetch_all_projects(max_pages=500)
 
-    if projects:
-        # Сохраняем всё в JSON
-        with open('all_projects.json', 'w', encoding='utf-8') as f:
-            json.dump(projects, f, ensure_ascii=False, indent=2)
-        print(f"\n💾 Сохранено {len(projects)} проектов в all_projects.json")
-
-        # Показываем первые 5 проектов с АКТИВНЫМИ ССЫЛКАМИ
-        api.print_projects_with_links(projects, limit=20)
-
-        # Показываем статистику
-        api.print_statistics(projects)
-    else:
+    if not projects:
         print("\n❌ Не удалось загрузить проекты")
+        input("\nНажми Enter для выхода...")
+        exit()
+
+    # Сохраняем в JSON (на всякий случай)
+    with open('all_projects.json', 'w', encoding='utf-8') as f:
+        json.dump(projects, f, ensure_ascii=False, indent=2)
+    print(f"\n💾 Сохранено {len(projects)} проектов в all_projects.json")
+
+    # Меню выбора
+    while True:
+        print("\n" + "=" * 70)
+        print("📋 ВЫБЕРИТЕ ТЕМУ ДЛЯ ПРОСМОТРА:")
+        print("=" * 70)
+        print("1. 🚛 ЭПД (электронные перевозочные документы)")
+        print("2. 📄 МЧД (машиночитаемые доверенности)")
+        print("3. 📁 ЭДО (электронный документооборот)")
+        print("4. ✍️ ЭП (электронная подпись)")
+        print("5. 🧾 ОФД (операторы фискальных данных)")
+        print("6. 📊 ВСЕ проекты")
+        print("0. 🚪 Выход")
+
+        choice = input("\n👉 Ваш выбор: ").strip()
+
+        topic_map = {
+            '1': 'epd',
+            '2': 'mchd',
+            '3': 'edo',
+            '4': 'ep',
+            '5': 'ofd'
+        }
+
+        if choice == '0':
+            print("\n👋 До свидания!")
+            break
+        elif choice == '6':
+            api.print_projects(projects, limit=10)
+        elif choice in topic_map:
+            topic = topic_map[choice]
+            topic_name = ProjectClassifier.get_topic_name(topic)
+            print(f"\n🔍 Ищем проекты по теме {topic_name}...")
+            api.print_projects(projects, limit=10, filter_topic=topic)
+        else:
+            print("\n❌ Неверный выбор, попробуйте снова")
 
     input("\n✅ Нажми Enter для выхода...")
