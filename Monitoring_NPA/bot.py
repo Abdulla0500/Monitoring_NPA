@@ -357,6 +357,7 @@ async def show_last_projects(query, context):
         text += f"   🔗 {url}\n\n"
         text += "━━━━━━━━━━━━━━━━\n"
 
+
     await query.edit_message_text(
         text,
         parse_mode='Markdown',
