@@ -348,6 +348,7 @@ async def show_last_projects(query, context):
             department=dept
         )
         topic_str = ProjectClassifier.format_topics(topics)
+
         url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
         text += f"{i}. {topic_str}\n\n"
