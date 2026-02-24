@@ -629,6 +629,7 @@ USER_ROLES = {
     }
 }
 
+
 def get_main_menu_keyboard():
     keyboard = [
         [InlineKeyboardButton("📋 Текущие проекты", callback_data="menu_current")],

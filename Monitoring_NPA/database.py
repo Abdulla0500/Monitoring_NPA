@@ -222,6 +222,7 @@ class Database:
                 ''', (user_id, project_id, datetime.now().isoformat()))
         self.conn.commit()
 
+
     def __del__(self):
         if hasattr(self, 'conn'):
             self.conn.close()

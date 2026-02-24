@@ -143,6 +143,7 @@ class RegulationAPI:
             topics = ProjectClassifier.classify(title, dept)
             topic_str = ProjectClassifier.format_topics(topics)
 
+
             print(f"\n{i}. 🆔 {project_id} {topic_str}")
             print(f"   📌 {self.wrap_text(title, 70)}")
             print(f"   🏢 {dept}")
