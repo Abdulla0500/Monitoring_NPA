@@ -46,6 +46,13 @@ class Database:
         sent_at TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (user_id),
         FOREIGN KEY (project_id) REFERENCES projects (project_id))''')
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_roles (
+                user_id INTEGER PRIMARY KEY,
+                role TEXT DEFAULT 'analyst',
+                updated_at TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (user_id)
+            )''')
 
         self.conn.commit()
         print("Таблицы успешно созданы (или уже существовали)")
@@ -77,6 +84,27 @@ class Database:
             (telegram_id,)
         )
         return self.cursor.fetchone()
+
+    def get_all_users(self):
+        try:
+            self.cursor.execute('''
+                SELECT telegram_id, first_name, last_name, username 
+                FROM users
+            ''')
+
+            return [
+                {
+                    'telegram_id': row[0],
+                    'first_name': row[1],
+                    'last_name': row[2],
+                    'username': row[3]
+                }
+                for row in self.cursor.fetchall()
+            ]
+
+        except Exception as e:
+            print(f"Error getting all users: {e}")
+            return []
     def subscribe(self, telegram_id, topic):
         self.cursor.execute(
             'SELECT user_id FROM users WHERE telegram_id = ?',
@@ -152,8 +180,7 @@ class Database:
     def save_project(self, project):
         from classifier import ProjectClassifier
         topics = ProjectClassifier.classify(
-            title=project.get('title', ''),
-            department=project.get('developedDepartment', {}).get('description', '')
+            title=project.get('title', '')
         )
 
         try:

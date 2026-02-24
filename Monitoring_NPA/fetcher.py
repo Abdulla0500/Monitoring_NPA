@@ -60,7 +60,7 @@ class RegulationAPI:
             lines.append(text[i:i + width])
         return '\n'.join(lines)
 
-    def fetch_all_projects(self, max_pages=500):
+    def fetch_all_projects(self, max_pages=100):
         """Загружает ВСЕ доступные страницы"""
         print("=" * 70)
         print("🚀 ЗАГРУЗКА ВСЕХ ПРОЕКТОВ")
@@ -155,7 +155,7 @@ if __name__ == "__main__":
     api = RegulationAPI()
 
     # Загружаем проекты (ОДИН РАЗ)
-    projects = api.fetch_all_projects(max_pages=500)
+    projects = api.fetch_all_projects(max_pages=100)
 
     if not projects:
         print("\n❌ Не удалось загрузить проекты")
