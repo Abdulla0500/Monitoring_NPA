@@ -5,3 +5,8 @@ git status
 git add .
 git commit -m "Что сделал сегодня"
 git push
+
+обновлять код
+cd /opt/bots/Monitoring_NPA
+git pull
+systemctl restart telegram-bot
