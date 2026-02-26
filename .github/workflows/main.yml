@@ -23,7 +23,7 @@ jobs:
       - name: Deploy to server
         run: |
           ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
-            cd /opt/bots/Monitoring_NPA &&
+            cd /opt/bots/Monitoring_NPA/Monitoring_NPA &&
             git pull &&
             systemctl restart telegram-bot
           "
