@@ -21,25 +21,32 @@ jobs:
         mkdir -p ~/.ssh
         ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
+    - name: Test SSH connection
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "echo 'SSH connection successful'"
+
     - name: Deploy to server
       run: |
         ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
           set -e
-          echo 'Переходим в директорию проекта...'
+          echo '📁 Переходим в директорию проекта...'
           cd /opt/bots/Monitoring_NPA
           
-          echo 'Обновляем код...'
+          echo '🔄 Обновляем код...'
           git pull
           
-          echo 'Переходим в папку с ботом...'
+          echo '📂 Переходим в папку с ботом...'
           cd Monitoring_NPA
           
-          echo 'Активируем виртуальное окружение и устанавливаем зависимости...'
+          echo '🐍 Активируем виртуальное окружение...'
           source ../venv/bin/activate
+          
+          echo '📦 Устанавливаем зависимости...'
           pip install -r ../requirements.txt
           
-          echo 'Перезапускаем бота...'
+          echo '🔄 Перезапускаем бота...'
           sudo systemctl restart telegram-bot
           
-          echo 'Деплой завершен!'
+          echo '✅ Деплой завершен!'
+          sudo systemctl status telegram-bot --no-pager | head -10
         "
