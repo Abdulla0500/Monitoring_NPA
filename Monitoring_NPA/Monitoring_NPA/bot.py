@@ -1246,7 +1246,7 @@ def main():
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
              send_daily_notifications,
-             trigger=CronTrigger(minute='*'),
+             trigger=CronTrigger(hour="17" , minute='0'),
              args=[application],
              id='test_notifications',
              replace_existing=True
