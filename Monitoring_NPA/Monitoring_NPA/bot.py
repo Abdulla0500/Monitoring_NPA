@@ -15,7 +15,6 @@ from apscheduler.triggers.cron import CronTrigger
 from database import Database
 from fetcher import RegulationAPI
 from classifier import ProjectClassifier
-#kfkkf
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -1247,7 +1246,7 @@ def main():
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
              send_daily_notifications,
-             trigger=CronTrigger(hour=9, minute=0),
+             trigger=CronTrigger(minute='1'),
              args=[application],
              id='test_notifications',
              replace_existing=True
