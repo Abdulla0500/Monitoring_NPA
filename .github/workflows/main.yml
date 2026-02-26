@@ -1,0 +1,60 @@
+name: Deploy Bot
+
+on:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.5.4
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    - name: Add host to known hosts
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Deploy to server
+      run: |
+        ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+          set -e
+          echo '📁 Переходим в директорию проекта...'
+          cd /opt/bots/Monitoring_NPA
+          
+          echo '🔄 Сохраняем базу данных...'
+          if [ -f Monitoring_NPA/monitoring.db ]; then
+            cp Monitoring_NPA/monitoring.db /tmp/monitoring.db.backup
+            echo '✅ База данных сохранена'
+          fi
+          
+          echo '🔄 Обновляем код...'
+          git fetch --all
+          git reset --hard origin/main
+          
+          echo '📂 Восстанавливаем базу данных...'
+          if [ -f /tmp/monitoring.db.backup ]; then
+            cp /tmp/monitoring.db.backup Monitoring_NPA/monitoring.db
+            echo '✅ База данных восстановлена'
+          fi
+          
+          echo '🐍 Активируем виртуальное окружение...'
+          source venv/bin/activate
+          
+          echo '📦 Устанавливаем зависимости (из корневой папки)...'
+          pip install -r requirements.txt
+          
+          echo '🔄 Перезапускаем бота...'
+          sudo systemctl restart telegram-bot
+          
+          echo '✅ Деплой завершен!'
+          echo ''
+          echo '📊 Статус бота:'
+          sudo systemctl status telegram-bot --no-pager | head -10
+        "
