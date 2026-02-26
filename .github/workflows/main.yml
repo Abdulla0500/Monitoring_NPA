@@ -8,22 +8,38 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.5.4
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.5.4
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Add host to known hosts
-        run: |
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+    - name: Add host to known hosts
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to server
-        run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
-            cd /opt/bots/Monitoring_NPA/Monitoring_NPA &&
-            git pull &&
-            systemctl restart telegram-bot
-          "
+    - name: Deploy to server
+      run: |
+        ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+          set -e
+          echo 'Переходим в директорию проекта...'
+          cd /opt/bots/Monitoring_NPA
+          
+          echo 'Обновляем код...'
+          git pull
+          
+          echo 'Переходим в папку с ботом...'
+          cd Monitoring_NPA
+          
+          echo 'Активируем виртуальное окружение и устанавливаем зависимости...'
+          source ../venv/bin/activate
+          pip install -r ../requirements.txt
+          
+          echo 'Перезапускаем бота...'
+          sudo systemctl restart telegram-bot
+          
+          echo 'Деплой завершен!'
+        "
