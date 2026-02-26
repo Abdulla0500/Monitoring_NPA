@@ -21,10 +21,6 @@ jobs:
         mkdir -p ~/.ssh
         ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
-    - name: Test SSH connection
-      run: |
-        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "echo 'SSH connection successful'"
-
     - name: Deploy to server
       run: |
         ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
@@ -32,21 +28,34 @@ jobs:
           echo '📁 Переходим в директорию проекта...'
           cd /opt/bots/Monitoring_NPA
           
-          echo '🔄 Обновляем код...'
-          git pull
+          echo '🔄 Сохраняем базу данных...'
+          if [ -f Monitoring_NPA/monitoring.db ]; then
+            cp Monitoring_NPA/monitoring.db /tmp/monitoring.db.backup
+            echo '✅ База данных сохранена'
+          fi
           
-          echo '📂 Переходим в папку с ботом...'
-          cd Monitoring_NPA
+          echo '🔄 Обновляем код...'
+          git fetch --all
+          git reset --hard origin/main
+          
+          echo '📂 Восстанавливаем базу данных...'
+          if [ -f /tmp/monitoring.db.backup ]; then
+            cp /tmp/monitoring.db.backup Monitoring_NPA/monitoring.db
+            echo '✅ База данных восстановлена'
+          fi
           
           echo '🐍 Активируем виртуальное окружение...'
+          cd Monitoring_NPA
           source ../venv/bin/activate
           
           echo '📦 Устанавливаем зависимости...'
-          pip install -r ../requirements.txt
+          pip install -r requirements.txt
           
           echo '🔄 Перезапускаем бота...'
           sudo systemctl restart telegram-bot
           
           echo '✅ Деплой завершен!'
+          echo ''
+          echo '📊 Статус бота:'
           sudo systemctl status telegram-bot --no-pager | head -10
         "
