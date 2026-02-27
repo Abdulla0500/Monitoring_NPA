@@ -47,13 +47,7 @@ class Database:
         sent_at TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (user_id),
         FOREIGN KEY (project_id) REFERENCES projects (project_id))''')
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS user_roles (
-                user_id INTEGER PRIMARY KEY,
-                role TEXT DEFAULT 'analyst',
-                updated_at TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (user_id)
-            )''')
+
 
         self.conn.commit()
         print("Таблицы успешно созданы (или уже существовали)")
