@@ -7,7 +7,13 @@ class Database:
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
         self.cursor = self.conn.cursor()
         self.create_tables()
+        self.check_tables()
 
+    def check_tables(self):
+        """Проверяет наличие таблиц"""
+        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = self.cursor.fetchall()
+        print(f"📊 Существующие таблицы: {[t[0] for t in tables]}")
     def create_tables(self):
         self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS users(
