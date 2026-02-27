@@ -628,7 +628,7 @@ async def test_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE)
             try:
                 project_date = datetime.strptime(date_str[:10], '%Y-%m-%d').date()
                 if project_date == yesterday.date():
-                    topics = ProjectClassifier.classify(title=p.get('title', ''))
+                    topics = ProjectClassifier.classify_as_list(title=p.get('title'))
                     if topics:
                         p['classified_topics'] = topics
                         yesterday_projects.append(p)
@@ -686,7 +686,7 @@ async def send_daily_notifications(application: Application):
             try:
                 project_date = datetime.strptime(date_str[:10], '%Y-%m-%d').date()
                 if project_date == yesterday.date():
-                    topics = ProjectClassifier.classify(title=p.get('title', ''))
+                    topics = ProjectClassifier.classify_as_list(title=p.get('title', ''))
                     if topics:
                         p['classified_topics'] = topics
                         yesterday_projects.append(p)
@@ -723,7 +723,7 @@ async def send_daily_notifications(application: Application):
 
 
 async def show_current_projects(query, context):
-    await query.edit_message_text("🔍 Загружаю проекты по вашим подпискам...")
+    await query.edit_message_text("🔍 Загружаю текущие проекты по вашим подпискам...")
 
     user_id = query.from_user.id
     user_role = db.get_user_role(user_id)
@@ -764,35 +764,99 @@ async def show_current_projects(query, context):
         )
         return
 
+    active_statuses = {
+        'Developing': '🔄 Разработка',
+        'Discussion': '💬 Публичное обсуждение',
+        'Evaluation': '📊 Оценка регулирующего воздействия',
+        'Conclusion': '📝 Подготовка заключения',
+        'Approval': '✅ Согласование',
+        'Signing': '✍️ Подписание',
+        'StartDiscussion': '🆕 Начало обсуждения',
+        'OnApprove': '⏳ На согласовании',
+        'Draft': '📝 Черновик',
+        'Text': '📝 Текст проекта'
+    }
+
+    completed_statuses = {
+        'Registered': '📋 Зарегистрирован',
+        'Published': '📢 Опубликован',
+        'Cancelled': '❌ Отменен',
+        'EndDiscussion': '✅ Обсуждение завершено',
+        'Rejected': '❌ Отклонен',
+        'Complete': '✅ Завершён',
+        'Completed': '✔️ Завершен'
+    }
+
     matching_projects = []
+    today = datetime.now().date()
+
     for p in projects:
-        topics = ProjectClassifier.classify(title=p.get('title', ''))
+        topics = ProjectClassifier.classify_as_list(title=p.get('title', ''))
         project_topics = set(topics)
         user_topics_set = set(user_subs)
 
-        if project_topics.intersection(user_topics_set):
+        if not project_topics.intersection(user_topics_set):
+            continue
+
+        status = p.get('status', '')
+
+
+        is_active = False
+
+        if status in active_statuses:
+            is_active = True
+        elif not status:
+            is_active = True
+        elif status not in completed_statuses:
+            is_active = True
+
+        if is_active:
+            end_date_str = p.get('endPublicDiscussion')
+            if end_date_str:
+                try:
+                    end_date = datetime.strptime(end_date_str[:10], '%Y-%m-%d').date()
+                    if end_date < today - timedelta(days=30):
+                        is_active = False
+                except (ValueError, TypeError):
+                    pass
+
+        if is_active:
             p['classified_topics'] = topics
             matching_projects.append(p)
 
     if not matching_projects:
         await query.edit_message_text(
-            "❌ Нет проектов по вашим подпискам.\n\nИспользуйте '🔍 Поиск по темам' чтобы подписаться на новые темы.",
+            "❌ Нет текущих проектов по вашим подпискам.\n\n"
+            "Попробуйте посмотреть архив или изменить подписки.",
             parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
-            ]])
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🗂 Перейти в архив", callback_data="menu_archive")],
+                [InlineKeyboardButton("🔍 Изменить подписки", callback_data="menu_search")],
+                [InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")]
+            ])
         )
         return
+
+    matching_projects.sort(
+        key=lambda x: x.get('publicationDate') or x.get('creationDate', '') or '',
+        reverse=True
+    )
 
     if user_role == 'product' and len(matching_projects) > 5:
         text = format_weekly_digest(matching_projects,
                                     datetime.now() - timedelta(days=7),
                                     datetime.now())
     else:
-        text = f"📋 **Текущие проекты (по вашим подпискам):**\n\n"
+        text = f"📋 **Текущие проекты (активные)**\n\n"
+        text += f"📊 По вашим подпискам: **{len(matching_projects)}** проектов в работе\n\n"
+        text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+
         for i, p in enumerate(matching_projects, 1):
-            text += f"{i}. {format_project_by_role(p, user_role)}\n"
-        text += f"\nВсего найдено {len(matching_projects)} проектов"
+            status = p.get('status', '')
+            status_emoji = get_status_emoji(status)
+
+            project_text = format_project_by_role(p, user_role)
+            text += f"**{i}.** {status_emoji} {project_text}\n"
 
     await split_long_message_for_query(
         query,
@@ -911,7 +975,7 @@ async def show_archive_projects(query, context, topic):
         filtered_projects = []
 
         for p in all_projects:
-            p_topics = ProjectClassifier.classify(title=p.get('title', ''))
+            p_topics = ProjectClassifier.classify_as_list(title=p.get('title', ''))
 
             if topic in p_topics:
                 p['classified_topics'] = p_topics

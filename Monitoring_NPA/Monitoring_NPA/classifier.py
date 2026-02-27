@@ -418,3 +418,8 @@ class ProjectClassifier:
             'topics': found_topics,
             'excluded': excluded_topics
         }
+
+    @classmethod
+    def classify_as_list(cls, title: str) -> List[str]:
+        topics_set = cls.classify(title)
+        return list(topics_set)
