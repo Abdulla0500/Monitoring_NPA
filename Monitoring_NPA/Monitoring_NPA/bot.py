@@ -323,15 +323,49 @@ def format_project_lawyer(project: Dict) -> str:
 
 def format_project_product(project: Dict) -> str:
     topics = project.get('classified_topics', [])
-    topic_name = TOPICS_SHORT.get(topics[0], topics[0]) if topics else 'НПА'
-    dept_short = project.get('developedDepartment', {}).get('description', 'Не указано')[:20]
-    title = project.get('title', 'Без названия')[:70]
+
+    # Безопасно получаем первую тему
+    if topics and len(topics) > 0:
+        if isinstance(topics, set):
+            first_topic = next(iter(topics)) if topics else None
+        else:
+            first_topic = topics[0] if topics else None
+        topic_name = TOPICS_SHORT.get(first_topic, first_topic) if first_topic else 'НПА'
+    else:
+        topic_name = 'НПА'
+
+    dept_short = project.get('developedDepartment', {}).get('description', 'Не указано')
+    if dept_short and len(dept_short) > 20:
+        dept_short = dept_short[:20] + '...'
+
+    title = project.get('title', 'Без названия')
+    if len(title) > 70:
+        title = title[:70] + '...'
+
     status = project.get('status', '')
     status_desc = STATUS_DESCRIPTIONS.get(status, status)
-    discussion_end = safe_format_date(project.get('endPublicDiscussion', ''))
-    planned_date = safe_format_date(project.get('plannedEffectiveDate', '') or project.get('deadline', ''))
 
-    return f"   • {dept_short}: {title}... (⚡ {status_desc}, обсуждение до {discussion_end}, вступает {planned_date})\n"
+    discussion_end = project.get('endPublicDiscussion', '')
+    if discussion_end and len(discussion_end) >= 10:
+        try:
+            end_date = datetime.strptime(discussion_end[:10], '%Y-%m-%d')
+            discussion_end = end_date.strftime('%d.%m.%Y')
+        except:
+            discussion_end = 'Не указана'
+    else:
+        discussion_end = 'Не указана'
+
+    planned_date = project.get('plannedEffectiveDate', '') or project.get('deadline', '')
+    if planned_date and len(planned_date) >= 10:
+        try:
+            plan_date = datetime.strptime(planned_date[:10], '%Y-%m-%d')
+            planned_date = plan_date.strftime('%d.%m.%Y')
+        except:
+            planned_date = 'Не указана'
+    else:
+        planned_date = 'Не указана'
+
+    return f"   • {dept_short}: {title}\n     ⚡ {status_desc} | 📅 Обсуждение до {discussion_end} | 📌 Вступает {planned_date}\n"
 
 
 def format_project_by_role(project: Dict, role: str) -> str:
@@ -353,7 +387,10 @@ def format_weekly_digest(projects: List[Dict], start_date: datetime, end_date: d
 
     by_topic = {}
     for p in projects:
-        for topic in p.get('classified_topics', []):
+        topics = p.get('classified_topics', [])
+        if isinstance(topics, set):
+            topics = list(topics)
+        for topic in topics:
             if topic not in by_topic:
                 by_topic[topic] = []
             by_topic[topic].append(p)
@@ -362,7 +399,7 @@ def format_weekly_digest(projects: List[Dict], start_date: datetime, end_date: d
 
     for topic, projs in by_topic.items():
         topic_name = TOPICS_SHORT.get(topic, topic)
-        text += f"🔹 {topic_name}\n"
+        text += f"### {topic_name}\n"
         for p in projs:
             text += format_project_product(p)
         text += "\n"
@@ -374,6 +411,8 @@ def format_weekly_digest(projects: List[Dict], start_date: datetime, end_date: d
         end = safe_get_date_str(p.get('endPublicDiscussion'))
         if end and end >= today:
             topics_list = p.get('classified_topics', ['НПА'])
+            if isinstance(topics_list, set):
+                topics_list = list(topics_list)
             topic = TOPICS_SHORT.get(topics_list[0], topics_list[0]) if topics_list else 'НПА'
             title = p.get('title', '')[:50]
             deadlines.append((end, topic, title))
@@ -381,7 +420,7 @@ def format_weekly_digest(projects: List[Dict], start_date: datetime, end_date: d
     if deadlines:
         deadlines.sort()
         text += "⏳ **Ближайшие дедлайны:**\n\n"
-        for end, topic, title in deadlines:
+        for end, topic, title in deadlines[:5]:
             try:
                 date_obj = datetime.strptime(end, '%Y-%m-%d')
                 date_str = date_obj.strftime('%d.%m')
@@ -774,7 +813,8 @@ async def show_current_projects(query, context):
         'StartDiscussion': '🆕 Начало обсуждения',
         'OnApprove': '⏳ На согласовании',
         'Draft': '📝 Черновик',
-        'Text': '📝 Текст проекта'
+        'Text': '📝 Текст проекта',
+        'PreDiscussion': '💬 Предварительное обсуждение'
     }
 
     completed_statuses = {
