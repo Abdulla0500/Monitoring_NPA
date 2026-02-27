@@ -128,6 +128,7 @@ async def send_daily_notifications(application: Application):
     sent_count = 0
     for user in users:
         user_id = user['telegram_id']
+        user_role = user.get('role', 'analyst')
         user_subs = db.get_subscriptions(user_id)
         if not user_subs:
             continue
@@ -139,7 +140,7 @@ async def send_daily_notifications(application: Application):
                 user_projects.append(p)
 
         if user_projects:
-            message = format_projects_notification(user_projects, user_subs, yesterday)
+            message = format_digest_by_role(user_projects, user_role, yesterday, yesterday)
         else:
             message = format_no_projects_notification(user_subs, yesterday)
         try:
