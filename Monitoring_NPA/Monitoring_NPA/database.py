@@ -52,6 +52,7 @@ class Database:
         self.conn.commit()
         print("Таблицы успешно созданы (или уже существовали)")
 
+
     def add_user(self, telegram_id, first_name, last_name, username, role='analyst'):
         self.cursor.execute('''
             INSERT OR IGNORE INTO users 
