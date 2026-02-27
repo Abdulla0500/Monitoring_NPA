@@ -1021,7 +1021,7 @@ async def show_archive_projects(query, context, topic):
     all_projects = projects_cache.get(all_projects_cache_key)
 
     if all_projects is None:
-        all_projects = await fetch_with_retry_simple(api.fetch_all_projects, max_retries=3, delay=2, max_pages=10000)
+        all_projects = await fetch_with_retry_simple(api.fetch_all_projects, max_retries=3, delay=2, max_pages=2500)
         if all_projects:
             projects_cache.set(all_projects_cache_key, all_projects)
             logger.info(f"Cached {len(all_projects)} projects for all topics")
