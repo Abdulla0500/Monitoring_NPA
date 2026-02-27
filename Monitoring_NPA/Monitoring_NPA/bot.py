@@ -334,38 +334,63 @@ def format_project_product(project: Dict) -> str:
     else:
         topic_name = 'НПА'
 
+    # Ведомство
     dept_short = project.get('developedDepartment', {}).get('description', 'Не указано')
     if dept_short and len(dept_short) > 20:
-        dept_short = dept_short[:20] + '...'
+        dept_short = dept_short[:20] + '…'
 
+    # Заголовок
     title = project.get('title', 'Без названия')
     if len(title) > 70:
-        title = title[:70] + '...'
+        title = title[:70] + '…'
 
+    # Статус
     status = project.get('status', '')
     status_desc = STATUS_DESCRIPTIONS.get(status, status)
 
+    # Дата окончания обсуждения
     discussion_end = project.get('endPublicDiscussion', '')
     if discussion_end and len(discussion_end) >= 10:
         try:
             end_date = datetime.strptime(discussion_end[:10], '%Y-%m-%d')
-            discussion_end = end_date.strftime('%d.%m.%Y')
+            discussion_end_formatted = end_date.strftime('%d.%m.%Y')
         except:
-            discussion_end = 'Не указана'
+            discussion_end_formatted = 'Не указана'
     else:
-        discussion_end = 'Не указана'
+        discussion_end_formatted = 'Не указана'
 
+    # Дата публикации
+    pub_date = project.get('publicationDate') or project.get('creationDate', '')
+    if pub_date and len(pub_date) >= 10:
+        try:
+            pub_date_obj = datetime.strptime(pub_date[:10], '%Y-%m-%d')
+            pub_date_formatted = pub_date_obj.strftime('%d.%m.%Y')
+        except:
+            pub_date_formatted = 'Не указана'
+    else:
+        pub_date_formatted = 'Не указана'
+
+    # Плановая дата вступления
     planned_date = project.get('plannedEffectiveDate', '') or project.get('deadline', '')
     if planned_date and len(planned_date) >= 10:
         try:
             plan_date = datetime.strptime(planned_date[:10], '%Y-%m-%d')
-            planned_date = plan_date.strftime('%d.%m.%Y')
+            planned_date_formatted = plan_date.strftime('%d.%m.%Y')
         except:
-            planned_date = 'Не указана'
+            planned_date_formatted = 'Не указана'
     else:
-        planned_date = 'Не указана'
+        planned_date_formatted = 'Не указана'
 
-    return f"   • {dept_short}: {title}\n     ⚡ {status_desc} | 📅 Обсуждение до {discussion_end} | 📌 Вступает {planned_date}\n"
+    # Добавляем тему в начало для контекста (опционально)
+    topic_prefix = f"[{topic_name}] " if topic_name != 'НПА' else ''
+
+    return (
+        f"   • {topic_prefix}**{dept_short}**: {title}\n\n"
+        f"     ⚡ {status_desc}\n\n"
+        f"     📅 Опубликован: {pub_date_formatted}\n\n"
+        f"     ⏳ Обсуждение до: {discussion_end_formatted}\n\n"
+        f"     📌 Вступает: {planned_date_formatted}\n\n"
+    )
 
 
 def format_project_by_role(project: Dict, role: str) -> str:
@@ -473,8 +498,7 @@ def format_projects_notification(projects: List[Dict], subscriptions: List[str],
             text += f"   🏢 {dept}\n\n"
             text += f"   🔗 {url}\n\n"
 
-        if len(projects) > 5:
-            text += f"... и еще {len(projects) - 5} проектов\n"
+
     else:
         text += "😴 Проектов не найдено\n"
 
