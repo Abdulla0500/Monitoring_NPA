@@ -304,7 +304,15 @@ def format_project_lawyer(project: Dict) -> str:
     planned_date = safe_format_date(project.get('plannedEffectiveDate', '') or project.get('deadline', ''))
     project_id = project.get('id')
     url = f"https://regulation.gov.ru/projects#npa={project_id}"
-
+    pub_date = project.get('publicationDate') or project.get('creationDate', '')
+    if pub_date and len(pub_date) >= 10:
+        try:
+            pub_date_obj = datetime.strptime(pub_date[:10], '%Y-%m-%d')
+            pub_date_formatted = pub_date_obj.strftime('%d.%m.%Y')
+        except:
+            pub_date_formatted = 'Не указана'
+    else:
+        pub_date_formatted = 'Не указана'
     return (
         f"⚖️ **НОВЫЙ ПРОЕКТ НПА (ПОЛНЫЙ ОБЗОР)**\n\n"
         f"📌 Тематика: {topic_str}\n\n"
@@ -316,6 +324,7 @@ def format_project_lawyer(project: Dict) -> str:
         f"   • Начало обсуждения: {discussion_start}\n"
         f"   • Окончание обсуждения: {discussion_end}\n"
         f"   • Плановая дата вступления: {planned_date}\n\n"
+        f"📅 Дата публикации: {pub_date_formatted}\n\n"
         f"🔗 {url}\n\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
     )
@@ -324,7 +333,6 @@ def format_project_lawyer(project: Dict) -> str:
 def format_project_product(project: Dict) -> str:
     topics = project.get('classified_topics', [])
 
-    # Безопасно получаем первую тему
     if topics and len(topics) > 0:
         if isinstance(topics, set):
             first_topic = next(iter(topics)) if topics else None
@@ -341,14 +349,12 @@ def format_project_product(project: Dict) -> str:
 
     # Заголовок
     title = project.get('title', 'Без названия')
-    if len(title) > 70:
-        title = title[:70] + '…'
+
 
     # Статус
     status = project.get('status', '')
     status_desc = STATUS_DESCRIPTIONS.get(status, status)
 
-    # Дата окончания обсуждения
     discussion_end = project.get('endPublicDiscussion', '')
     if discussion_end and len(discussion_end) >= 10:
         try:
@@ -359,7 +365,6 @@ def format_project_product(project: Dict) -> str:
     else:
         discussion_end_formatted = 'Не указана'
 
-    # Дата публикации
     pub_date = project.get('publicationDate') or project.get('creationDate', '')
     if pub_date and len(pub_date) >= 10:
         try:
@@ -370,7 +375,6 @@ def format_project_product(project: Dict) -> str:
     else:
         pub_date_formatted = 'Не указана'
 
-    # Плановая дата вступления
     planned_date = project.get('plannedEffectiveDate', '') or project.get('deadline', '')
     if planned_date and len(planned_date) >= 10:
         try:
@@ -380,16 +384,15 @@ def format_project_product(project: Dict) -> str:
             planned_date_formatted = 'Не указана'
     else:
         planned_date_formatted = 'Не указана'
-
-    # Добавляем тему в начало для контекста (опционально)
-    topic_prefix = f"[{topic_name}] " if topic_name != 'НПА' else ''
-
+    project_id = project.get('id')
+    url = f"https://regulation.gov.ru/projects#npa={project_id}"
     return (
-        f"   • {topic_prefix}**{dept_short}**: {title}\n\n"
-        f"     ⚡ {status_desc}\n\n"
+        f"   • Тема: {title}\n\n"
+        f"     ⚡ Статус: {status_desc}\n\n"
         f"     📅 Опубликован: {pub_date_formatted}\n\n"
         f"     ⏳ Обсуждение до: {discussion_end_formatted}\n\n"
         f"     📌 Вступает: {planned_date_formatted}\n\n"
+        f"     🔗 : {url}\n\n"
     )
 
 
