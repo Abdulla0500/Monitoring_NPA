@@ -8,7 +8,22 @@ class Database:
         self.cursor = self.conn.cursor()
         self.create_tables()
         self.check_tables()
+        self.migrate_database()
+    def migrate_database(self):
+        try:
+            # Проверяем структуру таблицы users
+            self.cursor.execute("PRAGMA table_info(users)")
+            columns = [column[1] for column in self.cursor.fetchall()]
+            print(f"📋 Текущие колонки в users: {columns}")
 
+            # Добавляем колонку role если её нет
+            if 'role' not in columns:
+                print("🔄 Добавляю колонку 'role' в таблицу users...")
+                self.cursor.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'analyst'")
+                self.conn.commit()
+                print("✅ Колонка 'role' добавлена")
+        except Exception as e:
+            print(f"❌ Ошибка при миграции: {e}")
     def check_tables(self):
         """Проверяет наличие таблиц"""
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
