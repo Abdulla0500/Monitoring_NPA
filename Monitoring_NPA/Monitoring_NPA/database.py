@@ -17,6 +17,7 @@ class Database:
         last_name TEXT,
         username TEXT,
         department TEXT,
+        role TEXT DEFAULT 'analyst',
         registered_at TIMESTAMP)''')
 
         self.cursor.execute('''
@@ -56,19 +57,20 @@ class Database:
 
         self.conn.commit()
         print("Таблицы успешно созданы (или уже существовали)")
+
     def add_user(self, telegram_id, first_name, last_name, username):
         self.cursor.execute('''
-                    INSERT OR IGNORE INTO users 
-                    (telegram_id, first_name, last_name, username, registered_at)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (
+            INSERT OR IGNORE INTO users 
+            (telegram_id, first_name, last_name, username, role, registered_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (
             telegram_id,
             first_name,
             last_name,
             username,
+            'analyst',
             datetime.now().isoformat()
         ))
-
         self.conn.commit()
 
         self.cursor.execute(
@@ -76,32 +78,79 @@ class Database:
             (telegram_id,)
         )
         result = self.cursor.fetchone()
-        return result[0]
+        return result[0] if result else None
+
+    def set_user_role(self, telegram_id, role):
+        self.cursor.execute(
+            'UPDATE users SET role = ? WHERE telegram_id = ?',
+            (role, telegram_id)
+        )
+        self.conn.commit()
+        return self.cursor.rowcount > 0
+
+    def get_user_role(self, telegram_id):
+        self.cursor.execute(
+            'SELECT role FROM users WHERE telegram_id = ?',
+            (telegram_id,)
+        )
+        result = self.cursor.fetchone()
+        return result[0] if result else 'analyst'
+
+    def user_exists(self, telegram_id):
+        self.cursor.execute(
+            'SELECT COUNT(*) FROM users WHERE telegram_id = ?',
+            (telegram_id,)
+        )
+        count = self.cursor.fetchone()[0]
+        return count > 0
+
+    def update_user(self, telegram_id, first_name=None, last_name=None, username=None):
+        self.cursor.execute('''
+            UPDATE users 
+            SET first_name = COALESCE(?, first_name),
+                last_name = COALESCE(?, last_name),
+                username = COALESCE(?, username)
+            WHERE telegram_id = ?
+        ''', (first_name, last_name, username, telegram_id))
+        self.conn.commit()
+        return self.cursor.rowcount > 0
 
     def get_user(self, telegram_id):
         self.cursor.execute(
-            'SELECT * FROM users WHERE telegram_id = ?',
+            'SELECT user_id, telegram_id, first_name, last_name, username, department, role, registered_at FROM users WHERE telegram_id = ?',
             (telegram_id,)
         )
-        return self.cursor.fetchone()
+        result = self.cursor.fetchone()
+        if result:
+            return {
+                'user_id': result[0],
+                'telegram_id': result[1],
+                'first_name': result[2],
+                'last_name': result[3],
+                'username': result[4],
+                'department': result[5],
+                'role': result[6] or 'analyst',
+                'registered_at': result[7]
+            }
+        return None
 
     def get_all_users(self):
         try:
             self.cursor.execute('''
-                SELECT telegram_id, first_name, last_name, username 
+                SELECT telegram_id, first_name, last_name, username, role
                 FROM users
             ''')
-
+            users = self.cursor.fetchall()
             return [
                 {
-                    'telegram_id': row[0],
-                    'first_name': row[1],
-                    'last_name': row[2],
-                    'username': row[3]
+                    'telegram_id': u[0],  # telegram_id
+                    'first_name': u[1],  # first_name
+                    'last_name': u[2],  # last_name
+                    'username': u[3],  # username
+                    'role': u[4] if u[4] else 'analyst'  # role
                 }
-                for row in self.cursor.fetchall()
+                for u in users
             ]
-
         except Exception as e:
             print(f"Error getting all users: {e}")
             return []

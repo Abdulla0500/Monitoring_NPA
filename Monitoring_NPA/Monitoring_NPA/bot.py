@@ -56,6 +56,7 @@ STATUS_DESCRIPTIONS = {
     'OnApprove': '⏳ На согласовании',
     'Rejected': '❌ Отклонен',
     'Draft': '📝 Черновик',
+    'Complete': '✅ Завершён'
 }
 
 PROCEDURE_TYPES = {
@@ -195,9 +196,9 @@ def format_projects_notification(projects: List[Dict], subscriptions: List[str],
 
             url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
-            text += f"{i}. **{topics_str}**\n"
-            text += f"   📌 {title}...\n"
-            text += f"   🏢 {dept}\n"
+            text += f"{i}. **{topics_str}**\n\n"
+            text += f"   📌 {title}...\n\n"
+            text += f"   🏢 {dept}\n\n"
             text += f"   🔗 {url}\n\n"
 
         if len(projects) > 5:
@@ -207,7 +208,7 @@ def format_projects_notification(projects: List[Dict], subscriptions: List[str],
 
         # Добавляем полезные ссылки
     text += "\n━━━━━━━━━━━━━━━━━━━━\n"
-    text += "🔔 **Управление подписками:** /start"
+    text += "🔔 **Управление подписками:** через меню '📌 Мои подписки'"
 
     return text
 
@@ -220,12 +221,12 @@ def format_no_projects_notification(subscriptions: List[str], date: datetime) ->
     # Показываем подписки пользователя
     for topic in subscriptions:
         topic_name = TOPICS_SHORT.get(topic, topic)
-        text += f"• {topic_name}\n"
+        text += f"• {topic_name}\n\n"
 
-    text += "\n📊 **Общая статистика:**\n"
+    text += "\n📊 **Общая статистика:**\n\n"
     text += f"• Отслеживается тем: **{len(subscriptions)}**\n"
 
-    text += "\n💡 **Совет:**\n"
+    text += "\n💡 **Совет:**\n\n"
     text += "Вы можете добавить новые темы через меню '🔍 Поиск по темам'\n\n"
 
     text += "🔔 **Управление подписками:** через меню '📌 Мои подписки'"
@@ -234,9 +235,7 @@ def format_no_projects_notification(subscriptions: List[str], date: datetime) ->
 
 
 async def test_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Команда для тестирования уведомлений
-    """
+
     await update.message.reply_text("🔍 Проверяю проекты за вчера...")
 
     # Имитируем отправку уведомления только этому пользователю
@@ -269,7 +268,6 @@ async def test_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except:
                 continue
 
-    # Получаем подписки пользователя
     user_subs = db.get_subscriptions(update.effective_user.id)
 
     if not user_subs:
@@ -281,7 +279,6 @@ async def test_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return
 
-    # Фильтруем по подпискам
     user_projects = []
     for p in yesterday_projects:
         if set(p.get('classified_topics', [])).intersection(set(user_subs)):
@@ -314,11 +311,11 @@ def format_project_stage(project: Dict) -> str:
 
     if status:
         status_desc = STATUS_DESCRIPTIONS.get(status, status)
-        stage_text.append(f"  ⚡ **Статус:** {status_desc}")
+        stage_text.append(f"   ⚡ **Статус:** {status_desc}")
 
     if procedure and procedure.get('id'):
         proc_desc = PROCEDURE_TYPES.get(procedure.get('id'), procedure.get('description', 'Неизвестная процедура'))
-        stage_text.append(f"  🔄 **Процедура:** {proc_desc}")
+        stage_text.append(f"   🔄 **Процедура:** {proc_desc}")
 
     dates = []
 
@@ -645,6 +642,7 @@ def get_main_menu_keyboard():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    is_new = not db.user_exists(user.id)
     db.add_user(
         telegram_id=user.id,
         first_name=user.first_name,
@@ -654,20 +652,190 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     logger.info(f"Новый пользователь: {user.first_name} (ID: {user.id})")
 
+    current_role = db.get_user_role(user.id)
+    role_name = USER_ROLES.get(current_role, {}).get('name', 'Аналитик')
+
+    if is_new:
+        welcome_text = (
+            f"👋 Привет, {user.first_name}! 🎉\n\n"
+            f"✅ Вам автоматически назначена роль: **{role_name}**\n"
+            f"Вы всегда можете сменить её в настройках.\n\n"
+            f"📋 **Выберите пункт меню:**"
+        )
+    else:
+        welcome_text = (
+            f"👋 С возвращением, {user.first_name}! 🎉\n"
+            f"Ваша текущая роль: **{role_name}**\n\n"
+            f"📋 **Выберите пункт меню:**"
+        )
+
     cache_key = f"subs_{user.id}"
     subscriptions_cache.delete(cache_key)
 
-    text = (
-        f"👋 Привет, {user.first_name}! 🎉\n\n"
-        f"📋 **Выберите пункт меню:**"
-    )
-
     await update.message.reply_text(
-        text,
+        welcome_text,
         parse_mode='Markdown',
         reply_markup=get_main_menu_keyboard()
     )
 
+def format_project_analyst(project: Dict) -> str:
+
+    topics = project.get('classified_topics', [])
+    topic_str = ' '.join([f"#{topic.upper()}" for topic in topics]) if topics else '#НПА'
+
+    title = project.get('title', 'Без названия')
+    dept = project.get('developedDepartment', {}).get('description', 'Не указано')
+
+    status = project.get('status', '')
+    status_desc = STATUS_DESCRIPTIONS.get(status, status)
+
+    published = project.get('publicationDate') or project.get('creationDate', '')
+    published = published[:10] if published else 'Не указана'
+
+    discussion_end = project.get('endPublicDiscussion', '')
+    discussion_end = discussion_end[:10] if discussion_end else 'Не указан'
+
+    project_id = project.get('id')
+    url = f"https://regulation.gov.ru/projects#npa={project_id}"
+
+    return (
+        f"📌 **Тема:** {topic_str}\n\n"
+        f"📄 **Заголовок:** {title[:100]}...\n\n"
+        f"🏢 **Ведомство:** {dept}\n\n"
+        f"⚡ **Текущий статус:** {status_desc}\n\n"
+        f"📅 **Опубликован:** {published}\n\n"
+        f"⏳ **Обсуждение до:** {discussion_end}\n\n"
+        f"🔗 {url}\n\n"
+        f"--------------------\n\n"
+    )
+
+
+def format_project_lawyer(project: Dict) -> str:
+
+    topics = project.get('classified_topics', [])
+    topic_str = ' '.join([f"#{topic.upper()}" for topic in topics]) if topics else '#НПА'
+
+    title = project.get('title', 'Без названия')
+    dept = project.get('developedDepartment', {}).get('description', 'Не указано')
+
+    project_type = project.get('projectType', {})
+    doc_type = PROJECT_TYPES.get(project_type.get('id'), project_type.get('description', 'Проект НПА'))
+
+    status = project.get('status', '')
+    status_desc = STATUS_DESCRIPTIONS.get(status, status)
+
+    discussion_start = project.get('startPublicDiscussion', '')
+    discussion_start = discussion_start[:10] if discussion_start else 'Не указано'
+
+    discussion_end = project.get('endPublicDiscussion', '')
+    discussion_end = discussion_end[:10] if discussion_end else 'Не указано'
+
+    planned_date = project.get('plannedEffectiveDate', '') or project.get('deadline', '')
+    planned_date = planned_date[:10] if planned_date else 'Не указана'
+
+    project_id = project.get('id')
+    url = f"https://regulation.gov.ru/projects#npa={project_id}"
+
+    return (
+        f"⚖️ **НОВЫЙ ПРОЕКТ НПА (ПОЛНЫЙ ОБЗОР)**\n\n"
+        f"📌 Тематика: {topic_str}\n\n"
+        f"🏢 Разработчик: {dept}\n\n"
+        f"📋 Вид документа: {doc_type}\n\n"
+        f"📄 Заголовок: {title}\n\n"
+        f"⚡ Текущий статус: {status_desc}\n\n"
+        f"📅 Этапы:\n\n"
+        f"   • Начало обсуждения: {discussion_start}\n"
+        f"   • Окончание обсуждения: {discussion_end}\n"
+        f"   • Плановая дата вступления: {planned_date}\n\n"
+        f"🔗 {url}\n\n"
+        f"--------------------\n\n"
+    )
+
+
+def format_project_product(project: Dict) -> str:
+
+    topics = project.get('classified_topics', [])
+    topic_str = ' '.join([f"#{topic.upper()}" for topic in topics]) if topics else '#НПА'
+    dept_short = project.get('developedDepartment', {}).get('description', 'Не указано')[:20]
+
+    title = project.get('title', 'Без названия')[:70]
+
+    status = project.get('status', '')
+    status_desc = STATUS_DESCRIPTIONS.get(status, status)
+
+    discussion_end = project.get('endPublicDiscussion', '')
+    discussion_end = discussion_end[:10] if discussion_end else '?'
+
+    planned_date = project.get('plannedEffectiveDate', '') or project.get('deadline', '')
+    planned_date = planned_date[:10] if planned_date else '?'
+
+    return f"   • {dept_short}: {title}... (⚡ {status_desc}, обсуждение до {discussion_end}, вступает {planned_date})\n"
+
+def format_weekly_digest(projects: List[Dict], start_date: datetime, end_date: datetime) -> str:
+    start_str = start_date.strftime('%d.%m')
+    end_str = end_date.strftime('%d.%m')
+
+    text = f"📊 **ЕЖЕНЕДЕЛЬНЫЙ ДАЙДЖЕСТ НПА ({start_str}–{end_str})**\n\n"
+
+    text += f"📈 Всего новых проектов: {len(projects)}\n"
+
+    by_topic = {}
+    for p in projects:
+        for topic in p.get('classified_topics', []):
+            if topic not in by_topic:
+                by_topic[topic] = []
+            by_topic[topic].append(p)
+
+    text += f"   • По нашим темам: {sum(len(v) for v in by_topic.values())}\n\n"
+
+    for topic, projs in by_topic.items():
+        topic_name = TOPICS_SHORT.get(topic, f"#{topic.upper()}")
+        text += f"🔹 {topic_name}\n"
+        for p in projs:
+            text += format_project_product(p)
+        text += "\n\n"
+
+    deadlines = []
+    for p in projects:
+        end = p.get('endPublicDiscussion', '')[:10]
+        if end and end >= datetime.now().strftime('%Y-%m-%d'):
+            topic = p.get('classified_topics', ['НПА'])[0].upper()
+            title = p.get('title', '')[:50]
+            deadlines.append((end, topic, title))
+
+    if deadlines:
+        deadlines.sort()
+        text += "⏳ **Ближайшие дедлайны:**\n\n"
+        for end, topic, title in deadlines[:5]:
+            date_obj = datetime.strptime(end, '%Y-%m-%d')
+            date_str = date_obj.strftime('%d.%m')
+            text += f"   • {date_str} — окончание обсуждения по {topic} ({title}...)\n"
+        text += "\n\n"
+
+    text += "📌 **Рекомендации по roadmap:**\n\n"
+
+    return text
+
+def format_project_by_role(project: Dict, role: str) -> str:
+    if role == 'analyst':
+        return format_project_analyst(project)
+    elif role == 'lawyer':
+        return format_project_lawyer(project)
+    elif role == 'product':
+        return format_project_product(project)
+    else:
+        return format_project_analyst(project)
+
+def format_digest_by_role(projects: List[Dict], role: str, start_date: datetime, end_date: datetime) -> str:
+    if role == 'product':
+        return format_weekly_digest(projects, start_date, end_date)
+    else:
+
+        text = f"📅 **Дайджест за {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}**\n\n"
+        for i, p in enumerate(projects, 1):
+            text += f"{i}. {format_project_by_role(p, role)}\n"
+            text += "━" * 40 + "\n"
+        return text
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -679,6 +847,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "menu_current":
         await show_current_projects(query, context)
+    elif data.startswith('select_role_'):
+        role_id = data.replace('select_role_', '')
+        await handle_role_selection(query, role_id)
+    elif data == "change_role":
+        await show_role_selection(query)
     elif data == "menu_search":
         await show_search_menu(query)
     elif data == "menu_subs":
@@ -901,7 +1074,7 @@ async def show_current_projects(query, context):
     await query.edit_message_text("🔍 Загружаю проекты по вашим подпискам...")
 
     user_id = query.from_user.id
-
+    user_role = db.get_user_role(user_id)
     cache_key_subs = f"subs_{user_id}"
     user_subs = subscriptions_cache.get(cache_key_subs)
 
@@ -950,62 +1123,32 @@ async def show_current_projects(query, context):
     matching_projects = []
 
     for p in projects:
-        title = p.get('title', 'Без названия')
-        dept = p.get('developedDepartment', {}).get('description', 'Не указано')
-        date = p.get('publicationDate') or p.get('creationDate', '')
-        project_id = p.get('id')
-
-        topics = ProjectClassifier.classify(
-            title=p.get('title')
-        )
-
+        topics = ProjectClassifier.classify(title=p.get('title', ''))
         project_topics = set(topics)
         user_topics_set = set(user_subs)
 
         if project_topics.intersection(user_topics_set):
-            count += 1
-            topic_str = ProjectClassifier.format_topics(topics)
-            url = f"https://regulation.gov.ru/projects#npa={project_id}"
-
-            stage_info = format_project_stage(p)
-
-            project_info = {
-                'number': count,
-                'topic_str': topic_str,
-                'title': title[:100],
-                'dept': dept,
-                'date': date[:10] if date else 'Нет даты',
-                'url': url,
-                'stage_info': stage_info,
-                'status_emoji': get_status_emoji(p.get('status', ''))
-            }
-            matching_projects.append(project_info)
+            p['classified_topics'] = topics
+            matching_projects.append(p)
 
     if not matching_projects:
-        text = "❌ Нет проектов по вашим подпискам.\n\nИспользуйте '🔍 Поиск по темам' чтобы подписаться на новые темы."
         await query.edit_message_text(
-            text,
+            "❌ Нет проектов по вашим подпискам.\n\nИспользуйте '🔍 Поиск по темам' чтобы подписаться на новые темы.",
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
             ]])
         )
         return
-
-    for project in matching_projects:
-        text += f"{project['number']}. {project['status_emoji']} {project['topic_str']}\n\n"
-        text += f"   📌 {project['title']}...\n\n"
-        text += f"   🏢 {project['dept']}\n\n"
-
-        if project['stage_info']:
-            for line in project['stage_info'].split('\n\n')[:3]:
-                text += f"   {line}\n\n"
-
-        text += f"   📅 {project['date']}\n\n"
-        text += f"   🔗 {project['url']}\n\n"
-        text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-
-
+    if user_role == 'product' and len(matching_projects) > 5:
+        text = format_weekly_digest(matching_projects,
+                                    datetime.now() - timedelta(days=7),
+                                    datetime.now())
+    else:
+        text = f"📋 **Текущие проекты (по вашим подпискам):**\n\n"
+        for i, p in enumerate(matching_projects[:10], 1):
+            text += f"{i}. {format_project_by_role(p, user_role)}\n"
+        text += f"\nВсего найдено {len(matching_projects)} проектов"
 
     await split_long_message_for_query(
         query,
@@ -1083,6 +1226,10 @@ async def show_my_subscriptions(query, user_id):
 
 
 async def show_settings_menu(query):
+    user_id = query.from_user.id
+    current_role = db.get_user_role(user_id)
+    role_name = USER_ROLES.get(current_role, {}).get('name', 'Не выбрана')
+
     cache_stats = (
         f"\n\n📊 **Статистика кеша:**\n"
         f"Проекты: {projects_cache.get_stats()['size']}/{projects_cache.get_stats()['max_size']}\n"
@@ -1091,6 +1238,7 @@ async def show_settings_menu(query):
     )
 
     keyboard = [
+        [InlineKeyboardButton(f"👤 Сменить роль (сейчас: {role_name})", callback_data="change_role")],
         [InlineKeyboardButton("🔔 Вкл/Выкл уведомления", callback_data="settings_notify")],
         [InlineKeyboardButton("⏰ Время уведомлений", callback_data="settings_time")],
         [InlineKeyboardButton("🗑 Очистить кеш", callback_data="clear_cache")],
@@ -1098,12 +1246,88 @@ async def show_settings_menu(query):
     ]
 
     await query.edit_message_text(
-        f"⚙️ **Настройки**\n\nВыберите что хотите изменить:{cache_stats}",
+        f"⚙️ **Настройки**\n\n"
+        f"Текущая роль: {role_name}\n"
+        f"Выберите что хотите изменить:{cache_stats}",
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def show_role_selection(query):
+    user_id = query.from_user.id
+    current_role = db.get_user_role(user_id)
+
+    keyboard = []
+    for role_id, role_info in USER_ROLES.items():
+        button_text = f"{role_info['name']} - {role_info['description']}"
+        if role_id == current_role:
+            button_text = f"✅ {button_text} (текущая)"
+
+        keyboard.append([
+            InlineKeyboardButton(
+                button_text,
+                callback_data=f"select_role_{role_id}"
+            )
+        ])
+
+    keyboard.append([InlineKeyboardButton("◀️ Назад в настройки", callback_data="menu_settings")])
+
+    text = "👤 **Смена роли**\n\n"
+    text += "Выберите новую роль — от этого будет зависеть формат отображения проектов:\n\n"
+
+    for role_id, role_info in USER_ROLES.items():
+        text += f"**{role_info['name']}**\n"
+        text += f"└ {role_info['description']}\n\n"
+
+    await query.edit_message_text(
+        text,
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
+async def handle_role_selection(query, role_id):
+
+    user_id = query.from_user.id
+    current_role = db.get_user_role(user_id)
+
+    if role_id == current_role:
+        # Если выбрали ту же роль
+        await query.answer("Это ваша текущая роль")
+        return
+
+    success = db.set_user_role(user_id, role_id)
+
+    if success:
+        role_name = USER_ROLES.get(role_id, {}).get('name', role_id)
+
+        # Очищаем кэш
+        cache_key = f"subs_{user_id}"
+        subscriptions_cache.delete(cache_key)
+
+        text = (
+            f"✅ Роль успешно изменена на **{role_name}**!\n\n"
+            f"Теперь проекты будут отображаться в новом формате."
+        )
+
+        keyboard = [
+            [InlineKeyboardButton("⚙️ Вернуться в настройки", callback_data="menu_settings")],
+            [InlineKeyboardButton("📋 В главное меню", callback_data="back_to_main")]
+        ]
+
+        await query.edit_message_text(
+            text,
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        logger.info(f"Пользователь {user_id} сменил роль на: {role_name}")
+    else:
+        await query.edit_message_text(
+            "❌ Ошибка при смене роли. Попробуйте позже.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад", callback_data="menu_settings")
+            ]])
+        )
 async def show_help(query):
     text = (
         "📚 **СПРАВКА**\n\n"
