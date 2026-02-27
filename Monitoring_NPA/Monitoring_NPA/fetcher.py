@@ -35,7 +35,7 @@ class RegulationAPI:
         }
 
         try:
-            response = self.session.post(url, json=payload, timeout=15)
+            response = self.session.post(url, json=payload, timeout=30)
 
             if response.status_code == 200:
                 data = response.json()
