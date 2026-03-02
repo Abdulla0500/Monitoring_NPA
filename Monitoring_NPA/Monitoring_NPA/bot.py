@@ -171,9 +171,7 @@ class Cache:
         }
 
 
-projects_cache = Cache(max_size=50, ttl=36000)
-archive_cache = Cache(max_size=30, ttl=36000)
-subscriptions_cache = Cache(max_size=200, ttl=60)
+projects_cache = Cache(max_size=1000, ttl=36000)
 
 
 def safe_get_date_str(date_value):
@@ -674,8 +672,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📋 **Выберите пункт меню:**"
         )
 
-    cache_key = f"subs_{user.id}"
-    subscriptions_cache.delete(cache_key)
     await update.message.reply_text(welcome_text, parse_mode='Markdown', reply_markup=get_main_menu_keyboard())
 
 
@@ -793,13 +789,8 @@ async def show_current_projects(query, context):
 
     user_id = query.from_user.id
     user_role = db.get_user_role(user_id)
-    cache_key_subs = f"subs_{user_id}"
-    user_subs = subscriptions_cache.get(cache_key_subs)
-
-    if user_subs is None:
-        user_subs = db.get_subscriptions(user_id)
-        subscriptions_cache.set(cache_key_subs, user_subs)
-        logger.info(f"Cached subscriptions for user {user_id}")
+    user_subs = db.get_subscriptions(user_id)
+    logger.info(f"Loaded subscriptions for user {user_id} from database")
 
     if not user_subs:
         await query.edit_message_text(
@@ -957,13 +948,7 @@ async def show_search_menu(query):
 
 
 async def show_my_subscriptions(query, user_id):
-    cache_key = f"subs_{user_id}"
-    subscriptions = subscriptions_cache.get(cache_key)
-
-    if subscriptions is None:
-        subscriptions = db.get_subscriptions(user_id)
-        subscriptions_cache.set(cache_key, subscriptions)
-        logger.info(f"Cached subscriptions for user {user_id}")
+    subscriptions = db.get_subscriptions(user_id)
 
     if not subscriptions:
         await query.edit_message_text(
@@ -1036,26 +1021,18 @@ async def show_archive_projects(query, context, topic):
         )
         return
 
-    filtered_cache_key = f"archive_{topic}_{datetime.now().strftime('%Y%m%d')}"
-    filtered_projects = archive_cache.get(filtered_cache_key)
 
-    if filtered_projects is None:
-        filtered_projects = []
+    filtered_projects = []
+    for p in all_projects:
+        p_topics = ProjectClassifier.classify_as_list(title=p.get('title', ''))
+        if topic in p_topics:
+            p['classified_topics'] = p_topics
+            filtered_projects.append(p)
 
-        for p in all_projects:
-            p_topics = ProjectClassifier.classify_as_list(title=p.get('title', ''))
-
-            if topic in p_topics:
-                p['classified_topics'] = p_topics
-                filtered_projects.append(p)
-
-        filtered_projects.sort(
-            key=lambda x: x.get('publicationDate') or x.get('creationDate', '') or '0000-00-00',
-            reverse=True
-        )
-
-        archive_cache.set(filtered_cache_key, filtered_projects)
-        logger.info(f"Cached {len(filtered_projects)} projects for topic {topic} (all time)")
+    filtered_projects.sort(
+        key=lambda x: x.get('publicationDate') or x.get('creationDate', '') or '0000-00-00',
+        reverse=True
+    )
 
     if not filtered_projects:
         await query.edit_message_text(
@@ -1095,10 +1072,6 @@ async def show_archive_projects(query, context, topic):
         text += f"   🔗 {url}\n\n"
         text += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
-    # Сообщаем сколько всего проектов, если их много
-    if len(filtered_projects) > 50:
-        text += f"\n📊 Показано 50 из {len(filtered_projects)} проектов. "
-        text += "Используйте поиск на сайте для более детального просмотра.\n"
 
     keyboard = [
         [InlineKeyboardButton("◀️ Назад к темам", callback_data="menu_archive")],
@@ -1112,23 +1085,16 @@ async def show_settings_menu(query):
     current_role = db.get_user_role(user_id)
     role_name = USER_ROLES.get(current_role, {}).get('name', 'Не выбрана')
 
-    cache_stats = (
-        f"\n\n📊 **Статистика кеша:**\n"
-        f"Проекты: {projects_cache.get_stats()['size']}/{projects_cache.get_stats()['max_size']}\n"
-        f"Архив: {archive_cache.get_stats()['size']}/{archive_cache.get_stats()['max_size']}\n"
-        f"Подписки: {subscriptions_cache.get_stats()['size']}/{subscriptions_cache.get_stats()['max_size']}"
-    )
+
 
     keyboard = [
         [InlineKeyboardButton(f"👤 Сменить роль (сейчас: {role_name})", callback_data="change_role")],
-        [InlineKeyboardButton("🔔 Вкл/Выкл уведомления", callback_data="settings_notify")],
         [InlineKeyboardButton("⏰ Время уведомлений", callback_data="settings_time")],
-        [InlineKeyboardButton("🗑 Очистить кеш", callback_data="clear_cache")],
         [InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")]
     ]
 
     await query.edit_message_text(
-        f"⚙️ **Настройки**\n\nТекущая роль: {role_name}\nВыберите что хотите изменить:{cache_stats}",
+        f"⚙️ **Настройки**\n\nТекущая роль: {role_name}\nВыберите что хотите изменить:",
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -1165,8 +1131,6 @@ async def handle_role_selection(query, role_id):
     success = db.set_user_role(user_id, role_id)
     if success:
         role_name = USER_ROLES.get(role_id, {}).get('name', role_id)
-        cache_key = f"subs_{user_id}"
-        subscriptions_cache.delete(cache_key)
         text = f"✅ Роль успешно изменена на **{role_name}**!\n\nТеперь проекты будут отображаться в новом формате."
         keyboard = [
             [InlineKeyboardButton("⚙️ Вернуться в настройки", callback_data="menu_settings")],
@@ -1335,16 +1299,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown',
             reply_markup=get_main_menu_keyboard()
         )
-    elif data == "clear_cache":
-        projects_cache.clear()
-        archive_cache.clear()
-        subscriptions_cache.clear()
-        await query.edit_message_text(
-            "✅ Кеш успешно очищен!",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
-            ]])
-        )
+
     elif data.startswith('archive_'):
         topic = data.replace('archive_', '')
         await show_archive_projects(query, context, topic)
@@ -1352,8 +1307,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         topic = data.replace('sub_', '')
         success = db.subscribe(user_id, topic)
         if success:
-            cache_key = f"subs_{user_id}"
-            subscriptions_cache.delete(cache_key)
             topic_name = TOPICS_SHORT.get(topic, topic)
             await query.edit_message_text(
                 f"✅ Вы подписались на тему {topic_name}",
@@ -1373,8 +1326,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         topic = data.replace('unsub_', '')
         success = db.unsubscribe(user_id, topic)
         if success:
-            cache_key = f"subs_{user_id}"
-            subscriptions_cache.delete(cache_key)
             topic_name = TOPICS_SHORT.get(topic, topic)
             await query.edit_message_text(
                 f"✅ Вы отписались от темы {topic_name}",
@@ -1417,7 +1368,7 @@ def main():
     logger.info(f"📊 Настройки кеша:")
     logger.info(f"   • Проекты: макс={projects_cache.max_size}, TTL={projects_cache.ttl}с")
     logger.info(f"   • Архив: макс={archive_cache.max_size}, TTL={archive_cache.ttl}с")
-    logger.info(f"   • Подписки: макс={subscriptions_cache.max_size}, TTL={subscriptions_cache.ttl}с")
+
 
     try:
         application.run_polling(allowed_updates=Update.ALL_TYPES)
