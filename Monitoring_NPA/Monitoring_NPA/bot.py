@@ -836,6 +836,7 @@ async def show_current_projects(query, context):
         'Evaluation': '📊 Оценка регулирующего воздействия',
         'Conclusion': '📝 Подготовка заключения',
         'Approval': '✅ Согласование',
+        'undefined': '🔄 Разработка',
         'Signing': '✍️ Подписание',
         'StartDiscussion': '🆕 Начало обсуждения',
         'OnApprove': '⏳ На согласовании',
