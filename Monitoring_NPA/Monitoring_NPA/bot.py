@@ -1208,7 +1208,39 @@ async def show_last_projects(query, context):
             ]])
         )
         return
+    target_id = "165914"  # ID проекта из скриншота
+    for p in projects:
+        if str(p.get('id')) == target_id or target_id in str(p.get('id')):
+            title = p.get('title', '')
+            logger.info("=" * 50)
+            logger.info(f"ТЕСТИРУЕМ ПРОЕКТ: {title}")
+            logger.info(f"ID: {p.get('id')}")
 
+            # Проверяем классификацию
+            topics = ProjectClassifier.classify(title)
+            logger.info(f"Результат classify(): {topics}")
+
+            # Проверяем каждую тему вручную
+            title_lower = title.lower()
+            logger.info(f"Заголовок в lower: {title_lower[:200]}")
+
+            for topic, keywords in ProjectClassifier.KEYWORDS.items():
+                logger.info(f"\nПроверяем тему: {topic}")
+                for keyword in keywords:
+                    if keyword.lower() in title_lower:
+                        logger.info(f"  ✓ НАЙДЕНО: '{keyword}'")
+                        break
+                else:
+                    logger.info(f"  ✗ Нет совпадений")
+
+            # Проверяем исключения
+            logger.info("\nПроверяем исключения:")
+            for topic, patterns in ProjectClassifier.EXCLUDE_PATTERNS.items():
+                for pattern in patterns:
+                    if re.search(pattern, title_lower):
+                        logger.info(f"  ✗ Исключение для {topic}: {pattern}")
+            logger.info("=" * 50)
+            break
     text = "📅 **Последние проекты:(за 7 дней):**\n\n"
     today = datetime.now().date()
     week_ago = today - timedelta(days=7)
