@@ -1367,7 +1367,7 @@ def main():
     logger.info("🚀 Бот запущен с поддержкой кеша и отображением этапов проектов!")
     logger.info(f"📊 Настройки кеша:")
     logger.info(f"   • Проекты: макс={projects_cache.max_size}, TTL={projects_cache.ttl}с")
-    logger.info(f"   • Архив: макс={archive_cache.max_size}, TTL={archive_cache.ttl}с")
+
 
 
     try:
