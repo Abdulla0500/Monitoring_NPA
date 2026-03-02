@@ -378,19 +378,19 @@ class ProjectClassifier:
         title_lower = title.lower()
         found_topics = set()
 
-        # Проверяем по всем темам
         for topic, keywords in cls.KEYWORDS.items():
-            # Сначала проверяем, не попадает ли проект под исключения для этой темы
+
+            # Проверяем исключения
             exclude_patterns = cls.EXCLUDE_PATTERNS.get(topic, [])
-            if cls._matches_exclude_patterns(title_lower, exclude_patterns):
-                continue
-
-
-            # Ищем ключевые слова
-            for keyword in keywords:
-                if keyword.lower() in title_lower:
-                    found_topics.add(topic)
+            for exclude in exclude_patterns:
+                if cls._matches(title_lower, exclude):
                     break
+            else:
+                # Проверяем ключевые слова
+                for keyword in keywords:
+                    if cls._matches(title_lower, keyword):
+                        found_topics.add(topic)
+                        break
 
         return found_topics
 
@@ -429,16 +429,18 @@ class ProjectClassifier:
 
         # Проверяем исключения
         for topic, patterns in cls.EXCLUDE_PATTERNS.items():
-            if cls._matches_exclude_patterns(title_lower, patterns):
-                excluded_topics.add(topic)
+            for pattern in patterns:
+                if cls._matches(title_lower, pattern):
+                    excluded_topics.add(topic)
+                    break
 
-        # Проверяем ключевые слова только для неисключенных тем
+        # Проверяем ключевые слова
         for topic, keywords in cls.KEYWORDS.items():
             if topic in excluded_topics:
                 continue
 
             for keyword in keywords:
-                if keyword.lower() in title_lower:
+                if cls._matches(title_lower, keyword):
                     found_topics.add(topic)
                     break
 
@@ -451,3 +453,33 @@ class ProjectClassifier:
     def classify_as_list(cls, title: str) -> List[str]:
         topics_set = cls.classify(title)
         return list(topics_set)
+
+    @staticmethod
+    def _is_regex(pattern: str) -> bool:
+        regex_symbols = r".*+?[](){}|\^$\\"
+        return any(symbol in pattern for symbol in regex_symbols)
+
+    @classmethod
+    def _matches(cls, text: str, phrase: str) -> bool:
+        if re.search(r'\d|№|@|-|/', phrase):
+            return phrase.lower() in text
+
+        if any(ch in phrase for ch in r".*+?[](){}|\^$\\"):
+            return re.search(phrase, text, re.IGNORECASE) is not None
+
+        morph_pattern = cls._make_morph_pattern(phrase)
+
+        return re.search(morph_pattern, text, re.IGNORECASE) is not None
+    @staticmethod
+    def _make_morph_pattern(phrase: str) -> str:
+        words = phrase.lower().strip().split()
+        pattern_words = []
+
+        for word in words:
+            if re.search(r'\d|№|@|-|/', word):
+                pattern_words.append(re.escape(word.lower()))
+            else:
+                base = word[:-2] if len(word) > 4 else word
+                pattern_words.append(f"{re.escape(base)}[а-я]*")
+
+        return r"\s+".join(pattern_words)
