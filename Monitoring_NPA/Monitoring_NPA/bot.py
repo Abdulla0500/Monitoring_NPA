@@ -1236,7 +1236,7 @@ async def show_last_projects(query, context):
         url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
         text += f"{i}. {status_emoji} {topic_str}\n\n"
-        text += f"   📌 {title[:200]}...\n\n"
+        text += f"   📌 {title}\n\n"
         text += f"   🏢 {dept}\n\n"
 
         if stage_info:
