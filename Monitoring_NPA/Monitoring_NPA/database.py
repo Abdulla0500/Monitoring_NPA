@@ -215,6 +215,25 @@ class Database:
         self.conn.commit()
         return self.cursor.rowcount > 0
 
+    def clear_subscriptions(self, telegram_id):
+        self.cursor.execute(
+            'SELECT user_id FROM users WHERE telegram_id = ?',
+            (telegram_id,)
+        )
+        user = self.cursor.fetchone()
+
+        if not user:
+            return False
+
+        user_id = user[0]
+
+        self.cursor.execute(
+            'DELETE FROM subscriptions WHERE user_id = ?',
+            (user_id,)
+        )
+
+        self.conn.commit()
+        return True
     def get_subscriptions(self, telegram_id):
         self.cursor.execute(
             'SELECT user_id FROM users WHERE telegram_id = ?',

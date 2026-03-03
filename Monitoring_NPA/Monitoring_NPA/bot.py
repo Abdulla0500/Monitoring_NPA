@@ -1410,6 +1410,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for topic in selected:
             db.subscribe(user_id, topic)
 
+        context.user_data.pop('selected_topics', None)
         await query.edit_message_text(
             "✅ Подписки обновлены!",
             reply_markup=InlineKeyboardMarkup([[
