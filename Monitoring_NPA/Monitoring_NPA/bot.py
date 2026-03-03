@@ -273,14 +273,24 @@ def format_project_analyst(project):
     pub_date = project.get("publicationDate") or project.get("creationDate")
     project_id = project.get("id")
     topics = project.get("classified_topics", [])
-    topic_str = " | ".join(topics) if topics else "Не определено"
+
+    # Формируем строку с темами
+    topics_block = ""
+    if topics:
+        # Берем первую тему для заголовка (или объединяем все)
+        topic_labels = [TOPICS_SHORT.get(t, t) for t in topics[:3]]  # Ограничиваем 3 темами
+        topic_str = " | ".join(topic_labels)
+        if len(topics) > 3:
+            topic_str += f" +{len(topics) - 3}"
+        topics_block = f"**{topic_str}**\n\n"
+
     if pub_date:
         pub_date = pub_date[:10]
 
     url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
     text = (
-        f"**{TOPICS_SHORT.get(topic, topic)}**\n\n"
+        f"{topics_block}"
         f"🏢 *{department}*\n\n"
         f"📂 {project_type}\n"
         f"⚖ {procedure}\n\n"
@@ -306,7 +316,13 @@ def format_project_lawyer(project):
     pub_date = project.get("publicationDate") or project.get("creationDate")
     project_id = project.get("id")
     topics = project.get("classified_topics", [])
-    topic_str = ", ".join(topics) if topics else "Не определено"
+
+    # Формируем строку с темами
+    if topics:
+        topic_labels = [TOPICS.get(t, t) for t in topics]  # Используем полные названия
+        topic_str = ", ".join(topic_labels)
+    else:
+        topic_str = "Не определено"
 
     if pub_date:
         pub_date = pub_date[:10]
@@ -326,7 +342,6 @@ def format_project_lawyer(project):
         f"📅 *Дата публикации:*\n{pub_date}\n\n"
         f"🔗 {url}\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-
     )
 
     return text
@@ -341,7 +356,16 @@ def format_project_product(project):
     procedure = project.get("procedure", {}).get("description", "")
     project_id = project.get("id")
     topics = project.get("classified_topics", [])
-    topic_str = ", ".join(topics) if topics else ""
+
+    # Формируем строку с темами
+    if topics:
+        topic_labels = [TOPICS_SHORT.get(t, t) for t in topics[:2]]  # Ограничиваем 2 темами
+        topic_str = " | ".join(topic_labels)
+        if len(topics) > 2:
+            topic_str += f" +{len(topics) - 2}"
+    else:
+        topic_str = "НПА"
+
     if pub_date:
         pub_date = pub_date[:10]
 
@@ -352,7 +376,7 @@ def format_project_product(project):
     url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
     text = (
-        f"🧭 {topic_str}\n\n"
+        f"🧭 **{topic_str}**\n\n"
         f"🏢 *{department}* | {status} | {pub_date}\n\n"
         f"📌 *{short_title}*\n\n"
         f"📂 {project_type}\n"
