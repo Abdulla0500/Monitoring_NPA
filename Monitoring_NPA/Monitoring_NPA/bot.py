@@ -1227,114 +1227,7 @@ async def show_help(query):
     )
 
 
-async def show_last_projects(query, context):
-    await query.edit_message_text("🔍 Загружаю последние проекты...")
 
-    cache_key = f"last_projects_{datetime.now().strftime('%Y%m%d_%H')}"
-    projects = projects_cache.get(cache_key)
-
-    if projects is None:
-        projects = await fetch_with_retry_simple(api.fetch_all_projects, max_retries=3, delay=2, max_pages=10)
-        if projects:
-            projects_cache.set(cache_key, projects)
-            logger.info(f"Cached {len(projects)} projects")
-
-    if not projects:
-        await query.edit_message_text(
-            "❌ Не удалось загрузить проекты",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
-            ]])
-        )
-        return
-    target_id = "165914"  # ID проекта из скриншота
-    for p in projects:
-        if str(p.get('id')) == target_id or target_id in str(p.get('id')):
-            title = p.get('title', '')
-            logger.info("=" * 50)
-            logger.info(f"ТЕСТИРУЕМ ПРОЕКТ: {title}")
-            logger.info(f"ID: {p.get('id')}")
-
-            # Проверяем классификацию
-            topics = ProjectClassifier.classify(title)
-            logger.info(f"Результат classify(): {topics}")
-
-            # Проверяем каждую тему вручную
-            title_lower = title.lower()
-            logger.info(f"Заголовок в lower: {title_lower[:200]}")
-
-            for topic, keywords in ProjectClassifier.KEYWORDS.items():
-                logger.info(f"\nПроверяем тему: {topic}")
-                for keyword in keywords:
-                    if keyword.lower() in title_lower:
-                        logger.info(f"  ✓ НАЙДЕНО: '{keyword}'")
-                        break
-                else:
-                    logger.info(f"  ✗ Нет совпадений")
-
-            # Проверяем исключения
-            logger.info("\nПроверяем исключения:")
-            for topic, patterns in ProjectClassifier.EXCLUDE_PATTERNS.items():
-                for pattern in patterns:
-                    if re.search(pattern, title_lower):
-                        logger.info(f"  ✗ Исключение для {topic}: {pattern}")
-            logger.info("=" * 50)
-            break
-    text = "📅 **Последние проекты:(за 7 дней):**\n\n"
-    today = datetime.now().date()
-    week_ago = today - timedelta(days=7)
-    projects_shown = 0
-
-    for i, p in enumerate(projects, 1):
-        date_str = p.get('publicationDate') or p.get('creationDate', '')
-        if date_str:
-            try:
-                project_date = datetime.strptime(date_str[:10], '%Y-%m-%d').date()
-                if project_date < week_ago:
-                    continue
-            except (ValueError, TypeError):
-                continue
-
-        projects_shown += 1
-        title = p.get('title', 'Без названия')
-        dept = p.get('developedDepartment', {}).get('description', 'Не указано')
-        date = p.get('publicationDate') or p.get('creationDate', '')
-        project_id = p.get('id')
-        topics = ProjectClassifier.classify(title=p.get('title'))
-        topic_str = ' '.join([TOPICS_SHORT.get(t, t) for t in topics]) if topics else 'НПА'
-        stage_info = format_project_stage(p)
-        status_emoji = get_status_emoji(p.get('status', ''))
-        url = f"https://regulation.gov.ru/projects#npa={project_id}"
-
-        text += f"{i}. {status_emoji} {topic_str}\n\n"
-        text += f"   📌 {title}\n\n"
-        text += f"   🏢 {dept}\n\n"
-
-        if stage_info:
-            for line in stage_info.split('\n')[:3]:
-                text += f"   {line}\n"
-
-        text += f"   📅 {date[:10] if date else 'Нет даты'}\n\n"
-        text += f"   🔗 {url}\n\n"
-        text += "━" * 18 + "\n"
-
-    if projects_shown == 0:
-        await query.edit_message_text(
-            "📅 За сегодня проектов нет",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
-            ]])
-        )
-        return
-
-    await split_long_message_for_query(
-        query,
-        text,
-        parse_mode='Markdown',
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
-        ]])
-    )
 
 async def show_time_selection(query):
     current_time = db.get_notification_time(query.from_user.id)
@@ -1353,6 +1246,153 @@ async def show_time_selection(query):
         f"⏰ **Выберите время уведомлений**\n\nТекущее: {current_time} (UTC)",
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def show_last_filter_menu(query):
+    keyboard = [
+        [InlineKeyboardButton("📅 Сегодня", callback_data="last_period_today")],
+        [InlineKeyboardButton("📆 Вчера", callback_data="last_period_yesterday")],
+        [InlineKeyboardButton("📆 За 3 дня", callback_data="last_period_3")],
+        [InlineKeyboardButton("📆 За 7 дней", callback_data="last_period_7")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="back_to_main")]
+    ]
+
+    await query.edit_message_text(
+        "📅 **Выберите период:**",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def show_last_scope_menu(query):
+    keyboard = [
+        [InlineKeyboardButton("🔥 Только мои подписки", callback_data="last_scope_mine")],
+        [InlineKeyboardButton("🌍 Все проекты", callback_data="last_scope_all")],
+        [InlineKeyboardButton("◀️ Назад", callback_data="menu_last")]
+    ]
+
+    await query.edit_message_text(
+        "🔎 **Показать проекты:**",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+async def show_last_projects(query, context, period="7", scope="all"):
+    await query.edit_message_text("🔍 Загружаю проекты...")
+
+    today = datetime.now().date()
+
+    if period == "today":
+        start_date = today
+        period_label = "сегодня"
+    elif period == "yesterday":
+        start_date = today - timedelta(days=1)
+        period_label = "вчера"
+    elif period == "3":
+        start_date = today - timedelta(days=3)
+        period_label = "за 3 дня"
+    elif period == "7":
+        start_date = today - timedelta(days=7)
+        period_label = "за 7 дней"
+    else:
+        start_date = today - timedelta(days=7)
+        period_label = "за 7 дней"
+
+    cache_key = f"last_projects_{datetime.now().strftime('%Y%m%d_%H')}"
+    projects = projects_cache.get(cache_key)
+
+    if projects is None:
+        projects = await fetch_with_retry_simple(
+            api.fetch_all_projects,
+            max_retries=3,
+            delay=2,
+            max_pages=50
+        )
+        if projects:
+            projects_cache.set(cache_key, projects)
+
+    if not projects:
+        await query.edit_message_text(
+            "❌ Не удалось загрузить проекты",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
+            ]])
+        )
+        return
+
+    user_subs = db.get_subscriptions(query.from_user.id) if scope == "mine" else []
+    matching_projects = []
+
+    for p in projects:
+        date_str = p.get("publicationDate") or p.get("creationDate")
+        if not date_str:
+            continue
+
+        try:
+            project_date = datetime.strptime(date_str[:10], "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            continue
+
+        if project_date < start_date:
+            continue
+
+        topics = ProjectClassifier.classify_as_list(title=p.get("title", ""))
+        if scope == "mine":
+            if not topics:
+                continue
+            if not set(topics).intersection(set(user_subs)):
+                continue
+
+        p["classified_topics"] = topics
+        matching_projects.append(p)
+
+    matching_projects.sort(
+        key=lambda x: x.get("publicationDate") or x.get("creationDate") or "",
+        reverse=True
+    )
+
+    if not matching_projects:
+        await query.edit_message_text(
+            f"❌ Нет проектов {period_label}",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад", callback_data="menu_last")
+            ]])
+        )
+        return
+
+    scope_label = "только мои подписки" if scope == "mine" else "все проекты"
+
+    text = (
+        f"📅 **Проекты {period_label}**\n\n"
+        f"🔎 Фильтр: {scope_label}\n\n"
+        f"📊 Найдено: **{len(matching_projects)}**\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+    )
+
+    for i, p in enumerate(matching_projects, 1):
+        title = p.get("title", "Без названия")
+        dept = p.get("developedDepartment", {}).get("description", "Не указано")
+        date = p.get("publicationDate") or p.get("creationDate", "")
+        project_id = p.get("id")
+        status_emoji = get_status_emoji(p.get("status", ""))
+
+        topics = p.get("classified_topics", [])
+        topic_str = " ".join([TOPICS_SHORT.get(t, t) for t in topics]) if topics else "НПА"
+
+        url = f"https://regulation.gov.ru/projects#npa={project_id}"
+
+        text += f"{i}. {status_emoji} {topic_str}\n\n"
+        text += f"   📌 {title[:200]}...\n\n"
+        text += f"   🏢 {dept[:100]}\n\n"
+        text += f"   📅 {date[:10] if date else 'Нет даты'}\n\n"
+        text += f"   🔗 {url}\n\n"
+        text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+
+    await split_long_message_for_query(
+        query,
+        text,
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
+        ]])
     )
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1395,7 +1435,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.answer("Ошибка сохранения")
     elif data == "menu_last":
-        await show_last_projects(query, context)
+        await show_last_filter_menu(query)
+    elif data.startswith("last_period_"):
+        period = data.replace("last_period_", "")
+        context.user_data["last_period"] = period
+        await show_last_scope_menu(query)
+    elif data.startswith("last_scope_"):
+        scope = data.replace("last_scope_", "")
+        period = context.user_data.get("last_period", "7")
+        await show_last_projects(query, context, period, scope)
     elif data == "back_to_main":
         await query.edit_message_text(
             "📋 **Выберите пункт меню:**",
