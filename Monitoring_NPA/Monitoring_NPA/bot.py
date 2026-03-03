@@ -38,7 +38,10 @@ STAGE_DESCRIPTIONS = {
     'Registration': '📋 Регистрация',
     'Publication': '📢 Опубликован',
     'Cancelled': '❌ Отменен',
-    'Completed': '✔️ Завершен'
+    'Completed': '✔️ Завершен',
+    'Notification': '📢 Уведомление о подготовке',
+    'Complete': '✅ Завершен',
+    'Procedure': '🔄 Процедура'
 }
 
 STATUS_DESCRIPTIONS = {
@@ -58,7 +61,9 @@ STATUS_DESCRIPTIONS = {
     'OnApprove': '⏳ На согласовании',
     'Rejected': '❌ Отклонен',
     'Draft': '📝 Черновик',
-    'Complete': '✅ Завершён'
+    'Complete': '✅ Завершён',
+    'Notification': '📢 Уведомление',
+    'Procedure': '🔄 Процедура'
 }
 
 PROCEDURE_TYPES = {
@@ -66,7 +71,8 @@ PROCEDURE_TYPES = {
     '2': '💬 Публичное обсуждение',
     '3': '📊 Оценка регулирующего воздействия',
     '4': '🔍 Экспертиза',
-    '5': '✅ Согласование'
+    '5': '✅ Согласование',
+    'Notification': '📢 Уведомление о подготовке'
 }
 
 PROJECT_TYPES = {
@@ -175,7 +181,26 @@ class Cache:
 
 
 projects_cache = Cache(max_size=1000, ttl=36000)
+user_subs_cache = Cache(max_size=1000, ttl=36000)
 
+
+def get_user_subs_cached(user_id):
+    cache_key = f"subs_{user_id}"
+    subs = user_subs_cache.get(cache_key)
+    if subs is not None:
+        logger.info(f"📦 Подписки для {user_id} взяты из кеша")
+        return subs
+
+    subs = db.get_subscriptions(user_id)
+    user_subs_cache.set(cache_key, subs)
+    logger.info(f"💾 Подписки для {user_id} загружены в кеш")
+    return subs
+
+
+def invalidate_user_subs_cache(user_id):
+    cache_key = f"subs_{user_id}"
+    user_subs_cache.delete(cache_key)
+    logger.info(f"♻️ Кеш подписок для {user_id} сброшен")
 
 def safe_get_date_str(date_value):
     if date_value is None:
@@ -701,7 +726,7 @@ async def test_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except:
                 continue
 
-    user_subs = db.get_subscriptions(update.effective_user.id)
+    user_subs = get_user_subs_cached(update.effective_user.id)
     if not user_subs:
         await update.message.reply_text(
             "❌ У вас нет подписок. Сначала подпишитесь на темы!",
@@ -807,7 +832,7 @@ async def send_daily_notifications(application: Application):
         if projects_cache.get(today_key):
             continue
 
-        user_subs = db.get_subscriptions(user_id)
+        user_subs = get_user_subs_cached(user_id)
         if not user_subs:
             continue
 
@@ -855,8 +880,8 @@ async def show_current_projects(query, context):
 
     user_id = query.from_user.id
     user_role = db.get_user_role(user_id)
-    user_subs = db.get_subscriptions(user_id)
-    logger.info(f"Loaded subscriptions for user {user_id} from database")
+    user_subs = get_user_subs_cached(user_id)
+    logger.info(f"Loaded subscriptions for user {user_id}")
 
     if not user_subs:
         await query.edit_message_text(
@@ -996,7 +1021,7 @@ async def show_search_menu(query, context):
     user_id = query.from_user.id
 
     if 'selected_topics' not in context.user_data:
-        current_subs = set(db.get_subscriptions(user_id))
+        current_subs = set(get_user_subs_cached(user_id))
         context.user_data['selected_topics'] = current_subs
 
     selected = context.user_data.get('selected_topics', set())
@@ -1038,7 +1063,7 @@ async def show_search_menu(query, context):
     )
 
 async def show_my_subscriptions(query, user_id):
-    subscriptions = db.get_subscriptions(user_id)
+    subscriptions = get_user_subs_cached(user_id)
 
     if not subscriptions:
         await query.edit_message_text(
@@ -1367,7 +1392,7 @@ async def show_last_projects(query, context, period="7", scope="all"):
         )
         return
 
-    user_subs = db.get_subscriptions(query.from_user.id) if scope == "mine" else []
+    user_subs = get_user_subs_cached(query.from_user.id) if scope == "mine" else []
     matching_projects = []
 
     for p in projects:
@@ -1508,6 +1533,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         topic = data.replace('unsub_', '')
         success = db.unsubscribe(user_id, topic)
         if success:
+            invalidate_user_subs_cache(user_id)
             topic_name = TOPICS_SHORT.get(topic, topic)
             await query.edit_message_text(
                 f"✅ Вы отписались от темы {topic_name}",
@@ -1536,7 +1562,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['selected_topics'] = selected
 
         await show_search_menu(query, context)
-    elif data == "save_subscriptions":
+        elif data == "save_subscriptions":
         selected = context.user_data.get('selected_topics', set())
         user_id = query.from_user.id
 
@@ -1548,6 +1574,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         for topic in selected:
             db.subscribe(user_id, topic)
+
+        # Сбрасываем кеш после изменения подписок
+        invalidate_user_subs_cache(user_id)
 
         context.user_data.pop('selected_topics', None)
         await query.edit_message_text(
@@ -1565,7 +1594,7 @@ def main():
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         send_daily_notifications,
-        trigger=CronTrigger(minute="*"),
+        trigger=CronTrigger(hour="*"),
         args=[application],
         id='daily_notifications',
         replace_existing=True
