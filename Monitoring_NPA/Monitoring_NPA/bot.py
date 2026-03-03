@@ -1340,7 +1340,7 @@ async def show_time_selection(query):
     current_time = db.get_notification_time(query.from_user.id)
 
     keyboard = []
-    times = ["06:00", "06:12", "08:00", "09:00", "10:00",
+    times = ["06:00", "07:00", "08:00", "09:00", "10:00",
              "12:00", "15:00", "18:00"]
 
     for t in times:
@@ -1350,7 +1350,7 @@ async def show_time_selection(query):
     keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="menu_settings")])
 
     await query.edit_message_text(
-        f"⏰ **Выберите время уведомлений**\n\nТекущее: {current_time}(UTC)",
+        f"⏰ **Выберите время уведомлений**\n\nТекущее: {current_time} (UTC)",
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
