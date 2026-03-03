@@ -471,61 +471,69 @@ def format_digest_by_role(projects: List[Dict], role: str, start_date: datetime,
         text += "━" * 24 + "\n"
     return text
 
+def format_projects_notification(projects, subs, start_date, end_date):
+    from datetime import datetime
 
-def format_projects_notification(projects: List[Dict], subscriptions: List[str], date: datetime) -> str:
-    date_str = date.strftime('%d.%m.%Y')
-    text = f"📅 **Дайджест за {date_str}**\n\n"
-    text += "📊 **Статистика по вашим подпискам:**\n\n"
-
-    for topic in subscriptions:
-        topic_name = TOPICS_SHORT.get(topic, topic)
-        count = len([p for p in projects if topic in p.get('classified_topics', [])])
-        if count > 0:
-            text += f"✅ {topic_name}: **{count}** проектов\n\n"
-        else:
-            text += f"❌ {topic_name}: **0** проектов\n\n"
-
-    text += "\n"
-
-    if projects:
-        text += "🔍 **Новые проекты:**\n\n"
-        for i, p in enumerate(projects, 1):
-            title = p.get('title', 'Без названия')[:100]
-            dept = p.get('developedDepartment', {}).get('description', 'Не указано')
-            project_id = p.get('id')
-            project_topics = [TOPICS_SHORT.get(t, t) for t in p.get('classified_topics', [])]
-            topics_str = ', '.join(project_topics)
-            url = f"https://regulation.gov.ru/projects#npa={project_id}"
-
-            text += f"{i}. **{topics_str}**\n\n"
-            text += f"   📌 {title}...\n\n"
-            text += f"   🏢 {dept}\n\n"
-            text += f"   🔗 {url}\n\n"
-
-
+    # --- Формируем диапазон дат ---
+    if start_date == end_date:
+        date_str = start_date.strftime("%d.%m.%Y")
+        header = f"📅 *Проекты за {date_str}*\n\n"
     else:
-        text += "😴 Проектов не найдено\n"
+        header = (
+            f"📅 *Дайджест за "
+            f"{start_date.strftime('%d.%m')}–{end_date.strftime('%d.%m.%Y')}*\n\n"
+        )
 
-    text += "\n━━━━━━━━━━━━━━━━━━━━\n"
-    text += "🔔 **Управление подписками:** через меню '📌 Мои подписки'"
+    header += f"📊 Найдено проектов: *{len(projects)}*\n"
+    header += "━━━━━━━━━━━━━━━━━━━━\n\n"
+
+    text = header
+
+    for i, p in enumerate(projects, 1):
+        title = p.get("title", "Без названия")
+        dept = p.get("developedDepartment", {}).get("description", "Не указано")
+        date = p.get("publicationDate") or p.get("creationDate", "")
+        project_id = p.get("id")
+        status_emoji = get_status_emoji(p.get("status", ""))
+
+        topics = p.get("classified_topics", [])
+        topic_str = " ".join([TOPICS_SHORT.get(t, t) for t in topics]) if topics else "НПА"
+
+        url = f"https://regulation.gov.ru/projects#npa={project_id}"
+
+        text += f"{i}. {status_emoji} {topic_str}\n\n"
+        text += f"📌 *{title}*\n\n"
+        text += f"🏢 {dept[:100]}\n\n"
+
+        if date:
+            text += f"📅 {date[:10]}\n\n"
+
+        text += f"🔗 {url}\n\n"
+        text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+
+    text += "\n🔔 *Ваши подписки:*\n"
+    text += ", ".join([TOPICS_SHORT.get(s, s) for s in subs])
+
     return text
 
+def format_no_projects_notification(subs, start_date, end_date):
 
-def format_no_projects_notification(subscriptions: List[str], date: datetime) -> str:
-    date_str = date.strftime('%d.%m.%Y')
-    text = f"📅 **Дайджест за {date_str}**\n\n"
-    text += "😴 **За вчера не вышло ни одного проекта** по вашим темам:\n\n"
+    if start_date == end_date:
+        date_str = start_date.strftime("%d.%m.%Y")
+        header = f"📅 *За {date_str} новых проектов не найдено*\n\n"
+    else:
+        header = (
+            f"📅 *За период "
+            f"{start_date.strftime('%d.%m')}–{end_date.strftime('%d.%m.%Y')} "
+            f"новых проектов не найдено*\n\n"
+        )
 
-    for topic in subscriptions:
-        topic_name = TOPICS_SHORT.get(topic, topic)
-        text += f"• {topic_name}\n\n"
+    header += "🔔 *Ваши подписки:*\n"
+    header += ", ".join([TOPICS_SHORT.get(s, s) for s in subs])
 
-    text += "\n📊 **Общая статистика:**\n\n"
-    text += f"• Отслеживается тем: **{len(subscriptions)}**\n"
-    text += "\n💡 **Совет:**\n\n"
-    text += "Вы можете добавить новые темы через меню '🔍 Поиск по темам'\n\n"
-    text += "🔔 **Управление подписками:** через меню '📌 Мои подписки'"
-    return text
+    header += "\n\nВы получите уведомление, как только появятся новые проекты."
+
+    return header
 
 
 async def safe_send_message(update_or_context, text: str, parse_mode: str = 'Markdown', reply_markup=None,
@@ -722,21 +730,46 @@ async def test_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     await update.message.reply_text(message, parse_mode='Markdown')
 
-
 async def send_daily_notifications(application: Application):
     logger.info("🕐 Запуск ежедневной рассылки уведомлений")
+
     users = db.get_all_users()
     if not users:
         logger.info("Нет пользователей для уведомлений")
         return
 
-    yesterday = datetime.now() - timedelta(days=1)
-    yesterday_str = yesterday.strftime('%Y-%m-%d')
-    cache_key = f"daily_projects_{yesterday_str}"
+    now = datetime.now()
+    weekday = now.weekday()  # 0=пн, 6=вск
+
+    if weekday == 5:
+        logger.info("Сегодня суббота — уведомления не отправляем")
+        return
+
+    elif weekday == 6:
+        logger.info("Сегодня воскресенье — уведомления не отправляем")
+        return
+
+    elif weekday == 0:
+        dates_to_check = [
+            (now - timedelta(days=3)).date(),
+            (now - timedelta(days=2)).date(),
+            (now - timedelta(days=1)).date()
+        ]
+    else:
+        dates_to_check = [(now - timedelta(days=1)).date()]
+
+    date_range_key = "_".join([d.strftime("%Y%m%d") for d in dates_to_check])
+    cache_key = f"daily_projects_{date_range_key}"
+
     projects = projects_cache.get(cache_key)
 
     if projects is None:
-        projects = await fetch_with_retry_simple(api.fetch_all_projects, max_retries=3, delay=2, max_pages=20)
+        projects = await fetch_with_retry_simple(
+            api.fetch_all_projects,
+            max_retries=3,
+            delay=2,
+            max_pages=20
+        )
         if projects:
             projects_cache.set(cache_key, projects)
 
@@ -744,23 +777,29 @@ async def send_daily_notifications(application: Application):
         logger.error("Не удалось загрузить проекты для уведомлений")
         return
 
-    yesterday_projects = []
+    projects_for_notification = []
+
     for p in projects:
-        date_str = p.get('publicationDate') or p.get('creationDate', '')
-        if date_str:
-            try:
-                project_date = datetime.strptime(date_str[:10], '%Y-%m-%d').date()
-                if project_date == yesterday.date():
-                    topics = ProjectClassifier.classify_as_list(title=p.get('title', ''))
-                    if topics:
-                        p['classified_topics'] = topics
-                        yesterday_projects.append(p)
-            except (ValueError, TypeError):
-                continue
+        date_str = p.get('publicationDate') or p.get('creationDate')
+        if not date_str:
+            continue
+
+        try:
+            project_date = datetime.strptime(date_str[:10], '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            continue
+
+        if project_date in dates_to_check:
+            topics = ProjectClassifier.classify_as_list(title=p.get('title', ''))
+            if topics:
+                p['classified_topics'] = topics
+                projects_for_notification.append(p)
+
+    if not projects_for_notification:
+        logger.info("Нет проектов для уведомлений")
+        return
 
     sent_count = 0
-
-    now = datetime.now()
     current_time_str = now.strftime("%H:%M")
 
     for user in users:
@@ -769,23 +808,38 @@ async def send_daily_notifications(application: Application):
 
         if user_time != current_time_str:
             continue
-        today_key = f"sent_{user_id}_{yesterday.strftime('%Y%m%d')}"
+
+        # уникальный ключ отправки
+        today_key = f"sent_{user_id}_{date_range_key}"
         if projects_cache.get(today_key):
             continue
+
         user_subs = db.get_subscriptions(user_id)
         if not user_subs:
             continue
 
         user_projects = []
-        for p in yesterday_projects:
-            project_topics = set(p.get('classified_topics', []))
-            if project_topics.intersection(set(user_subs)):
+        for p in projects_for_notification:
+            if set(p['classified_topics']).intersection(set(user_subs)):
                 user_projects.append(p)
 
+        # формируем диапазон дат для заголовка
+        start_date = min(dates_to_check)
+        end_date = max(dates_to_check)
+
         if user_projects:
-            message = format_projects_notification(user_projects, user_subs, yesterday)
+            message = format_projects_notification(
+                user_projects,
+                user_subs,
+                start_date,
+                end_date
+            )
         else:
-            message = format_no_projects_notification(user_subs, yesterday)
+            message = format_no_projects_notification(
+                user_subs,
+                start_date,
+                end_date
+            )
 
         try:
             await application.bot.send_message(
@@ -797,8 +851,11 @@ async def send_daily_notifications(application: Application):
             sent_count += 1
             logger.info(f"Уведомление отправлено пользователю {user_id}")
             await asyncio.sleep(0.5)
+
         except Exception as e:
             logger.error(f"Ошибка отправки уведомления пользователю {user_id}: {e}")
+
+    logger.info(f"Рассылка завершена. Отправлено: {sent_count}")
 
 async def show_current_projects(query, context):
     await query.edit_message_text("🔍 Загружаю текущие проекты по вашим подпискам...")
@@ -945,7 +1002,6 @@ async def show_current_projects(query, context):
 async def show_search_menu(query, context):
     user_id = query.from_user.id
 
-    # если зашли впервые — подгружаем текущие подписки
     if 'selected_topics' not in context.user_data:
         current_subs = set(db.get_subscriptions(user_id))
         context.user_data['selected_topics'] = current_subs
