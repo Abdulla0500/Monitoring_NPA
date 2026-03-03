@@ -374,11 +374,11 @@ class ProjectClassifier:
 
 
     @classmethod
-    def classify(cls, text: str) -> Set[str]:
-        if not text:
+    def classify(cls, title: str) -> Set[str]:
+        if not title:
             return set()
 
-        text_lower = text.lower()
+        title_lower = title.lower()
         found_topics = set()
 
         for topic, keywords in cls.KEYWORDS.items():
@@ -386,12 +386,12 @@ class ProjectClassifier:
             # Проверяем исключения
             exclude_patterns = cls.EXCLUDE_PATTERNS.get(topic, [])
             for exclude in exclude_patterns:
-                if cls._matches(text_lower, exclude):
+                if cls._matches(title_lower, exclude):
                     break
             else:
                 # Проверяем ключевые слова
                 for keyword in keywords:
-                    if cls._matches(text_lower, keyword):
+                    if cls._matches(title_lower, keyword):
                         found_topics.add(topic)
                         break
 
