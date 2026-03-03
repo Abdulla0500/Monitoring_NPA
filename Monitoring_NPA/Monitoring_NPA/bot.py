@@ -315,7 +315,7 @@ def format_project_analyst(project):
     url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
     text = (
-        f"{topic_str}"
+        f"{topic_str}\n\n"
         f"🏢 *{department}*\n\n"
         f"📂 {project_type}\n"
         f"⚖ {procedure}\n\n"
