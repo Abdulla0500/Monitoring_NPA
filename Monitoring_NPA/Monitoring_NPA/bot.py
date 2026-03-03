@@ -975,39 +975,36 @@ async def show_search_menu(query, context):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-
 async def show_my_subscriptions(query, user_id):
     subscriptions = db.get_subscriptions(user_id)
 
     if not subscriptions:
         await query.edit_message_text(
-            "❌ У вас нет активных подписок.\n\nХотите подписаться?",
-            parse_mode='Markdown',
+            "❌ У вас нет активных подписок.\n\n"
+            "Вы можете выбрать интересующие темы в разделе управления.",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📋 Перейти к подписке", callback_data="menu_search")],
+                [InlineKeyboardButton("⚙️ Управлять подписками", callback_data="menu_search")],
                 [InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")]
             ])
         )
         return
 
     text = "📌 **Ваши подписки:**\n\n"
-    keyboard = []
 
     for topic in subscriptions:
-        text += f"• {TOPICS_SHORT.get(topic, topic)}\n"
-        keyboard.append([
-            InlineKeyboardButton(
-                f"❌ Отписаться от {TOPICS_SHORT.get(topic, topic)}",
-                callback_data=f"unsub_{topic}"
-            )
-        ])
+        full_name = TOPICS.get(topic, topic)
+        text += f"• {full_name}\n"
 
-    keyboard.append([InlineKeyboardButton("➕ Добавить подписки", callback_data="menu_search")])
-    keyboard.append([InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")])
+    keyboard = [
+        [InlineKeyboardButton("⚙️ Управлять подписками", callback_data="menu_search")],
+        [InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")]
+    ]
 
-    await query.edit_message_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
-
-
+    await query.edit_message_text(
+        text,
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 async def show_archive_topics(query):
     keyboard = []
     row = []
