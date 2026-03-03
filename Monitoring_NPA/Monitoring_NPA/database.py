@@ -20,6 +20,12 @@ class Database:
             if 'role' not in columns:
                 print("🔄 Добавляю колонку 'role' в таблицу users...")
                 self.cursor.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'analyst'")
+
+            if 'notification_time' not in columns:
+                print("🔄 Добавляю колонку 'notification_time'...")
+                self.cursor.execute(
+                    "ALTER TABLE users ADD COLUMN notification_time TEXT DEFAULT '06:00'"
+                )
                 self.conn.commit()
                 print("✅ Колонка 'role' добавлена")
         except Exception as e:
@@ -306,6 +312,21 @@ class Database:
                 ''', (user_id, project_id, datetime.now().isoformat()))
         self.conn.commit()
 
+    def set_notification_time(self, telegram_id, time_str):
+        self.cursor.execute(
+            'UPDATE users SET notification_time = ? WHERE telegram_id = ?',
+            (time_str, telegram_id)
+        )
+        self.conn.commit()
+        return self.cursor.rowcount > 0
+
+    def get_notification_time(self, telegram_id):
+        self.cursor.execute(
+            'SELECT notification_time FROM users WHERE telegram_id = ?',
+            (telegram_id,)
+        )
+        result = self.cursor.fetchone()
+        return result[0] if result and result[0] else '06:00'
 
     def __del__(self):
         if hasattr(self, 'conn'):

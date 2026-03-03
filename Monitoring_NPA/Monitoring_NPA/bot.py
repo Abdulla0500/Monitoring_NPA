@@ -475,15 +475,15 @@ def format_digest_by_role(projects: List[Dict], role: str, start_date: datetime,
 def format_projects_notification(projects: List[Dict], subscriptions: List[str], date: datetime) -> str:
     date_str = date.strftime('%d.%m.%Y')
     text = f"📅 **Дайджест за {date_str}**\n\n"
-    text += "📊 **Статистика по вашим подпискам:**\n"
+    text += "📊 **Статистика по вашим подпискам:**\n\n"
 
     for topic in subscriptions:
         topic_name = TOPICS_SHORT.get(topic, topic)
         count = len([p for p in projects if topic in p.get('classified_topics', [])])
         if count > 0:
-            text += f"✅ {topic_name}: **{count}** проектов\n"
+            text += f"✅ {topic_name}: **{count}** проектов\n\n"
         else:
-            text += f"❌ {topic_name}: **0** проектов\n"
+            text += f"❌ {topic_name}: **0** проектов\n\n"
 
     text += "\n"
 
@@ -759,8 +759,19 @@ async def send_daily_notifications(application: Application):
                 continue
 
     sent_count = 0
+
+    now = datetime.now()
+    current_time_str = now.strftime("%H:%M")
+
     for user in users:
         user_id = user['telegram_id']
+        user_time = db.get_notification_time(user_id)
+
+        if user_time != current_time_str:
+            continue
+        today_key = f"sent_{user_id}_{yesterday.strftime('%Y%m%d')}"
+        if projects_cache.get(today_key):
+            continue
         user_subs = db.get_subscriptions(user_id)
         if not user_subs:
             continue
@@ -777,15 +788,17 @@ async def send_daily_notifications(application: Application):
             message = format_no_projects_notification(user_subs, yesterday)
 
         try:
-            await application.bot.send_message(chat_id=user_id, text=message, parse_mode='Markdown')
+            await application.bot.send_message(
+                chat_id=user_id,
+                text=message,
+                parse_mode='Markdown'
+            )
+            projects_cache.set(today_key, True)
             sent_count += 1
             logger.info(f"Уведомление отправлено пользователю {user_id}")
             await asyncio.sleep(0.5)
         except Exception as e:
             logger.error(f"Ошибка отправки уведомления пользователю {user_id}: {e}")
-
-    logger.info(f"✅ Уведомления отправлены {sent_count} пользователям")
-
 
 async def show_current_projects(query, context):
     await query.edit_message_text("🔍 Загружаю текущие проекты по вашим подпискам...")
@@ -1323,7 +1336,24 @@ async def show_last_projects(query, context):
         ]])
     )
 
+async def show_time_selection(query):
+    current_time = db.get_notification_time(query.from_user.id)
 
+    keyboard = []
+    times = ["06:00", "07:00", "08:00", "09:00", "10:00",
+             "12:00", "15:00", "18:00", "20:00", "22:00"]
+
+    for t in times:
+        text = f"✅ {t}" if t == current_time else t
+        keyboard.append([InlineKeyboardButton(text, callback_data=f"set_time_{t}")])
+
+    keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="menu_settings")])
+
+    await query.edit_message_text(
+        f"⏰ **Выберите время уведомлений**\n\nТекущее: {current_time}",
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1349,6 +1379,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_settings_menu(query)
     elif data == "menu_help":
         await show_help(query)
+    elif data == "settings_time":
+        await show_time_selection(query)
+    elif data.startswith("set_time_"):
+        time_str = data.replace("set_time_", "")
+        success = db.set_notification_time(user_id, time_str)
+
+        if success:
+            await query.edit_message_text(
+                f"✅ Время уведомлений установлено на {time_str}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("◀️ Назад в настройки", callback_data="menu_settings")]
+                ])
+            )
+        else:
+            await query.answer("Ошибка сохранения")
     elif data == "menu_last":
         await show_last_projects(query, context)
     elif data == "back_to_main":
@@ -1423,14 +1468,14 @@ def main():
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         send_daily_notifications,
-        trigger=CronTrigger(hour="6", minute='0'),
+        trigger=CronTrigger(minute="*"),
         args=[application],
         id='daily_notifications',
         replace_existing=True
     )
 
     scheduler.start()
-    logger.info("⏰ Планировщик уведомлений запущен (ежедневно в 7:00)")
+    logger.info("⏰ Планировщик уведомлений запущен (проверка каждую минуту)")
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("test_notify", test_notifications))
