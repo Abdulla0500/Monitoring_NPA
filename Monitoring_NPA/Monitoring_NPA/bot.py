@@ -929,9 +929,16 @@ async def show_current_projects(query, context):
         ]])
     )
 
-
 async def show_search_menu(query, context):
+    user_id = query.from_user.id
+
+    # если зашли впервые — подгружаем текущие подписки
+    if 'selected_topics' not in context.user_data:
+        current_subs = set(db.get_subscriptions(user_id))
+        context.user_data['selected_topics'] = current_subs
+
     selected = context.user_data.get('selected_topics', set())
+
     keyboard = []
     row = []
 
@@ -942,12 +949,12 @@ async def show_search_menu(query, context):
         else:
             button_text = topic_name
 
-        button = InlineKeyboardButton(
-            button_text,
-            callback_data=f"toggle_{topic_code}"
+        row.append(
+            InlineKeyboardButton(
+                button_text,
+                callback_data=f"toggle_{topic_code}"
+            )
         )
-
-        row.append(button)
 
         if i % 2 == 0:
             keyboard.append(row)
@@ -957,15 +964,14 @@ async def show_search_menu(query, context):
         keyboard.append(row)
 
     keyboard.append([
-        InlineKeyboardButton("✅ Сохранить выбор", callback_data="save_subscriptions")
+        InlineKeyboardButton("💾 Сохранить", callback_data="save_subscriptions")
     ])
     keyboard.append([
-        InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
+        InlineKeyboardButton("◀️ Назад", callback_data="back_to_main")
     ])
 
     await query.edit_message_text(
-        "📋 **Выберите темы для подписки:**\n(можно несколько)",
-        parse_mode='Markdown',
+        "📋 Выберите темы (можно несколько):",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1337,7 +1343,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "change_role":
         await show_role_selection(query)
     elif data == "menu_search":
-        await show_search_menu(query)
+        await show_search_menu(query, context)
     elif data == "menu_subs":
         await show_my_subscriptions(query, user_id)
     elif data == "menu_archive":
@@ -1358,25 +1364,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith('archive_'):
         topic = data.replace('archive_', '')
         await show_archive_projects(query, context, topic)
-    elif data.startswith('sub_'):
-        topic = data.replace('sub_', '')
-        success = db.subscribe(user_id, topic)
-        if success:
-            topic_name = TOPICS_SHORT.get(topic, topic)
-            await query.edit_message_text(
-                f"✅ Вы подписались на тему {topic_name}",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
-                ]])
-            )
-            logger.info(f"Пользователь {user_id} подписался на {topic}")
-        else:
-            await query.edit_message_text(
-                "❌ Ошибка подписки.\nВозможно, вы уже подписаны на эту тему",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("◀️ Назад", callback_data="menu_search")
-                ]])
-            )
+
     elif data.startswith('unsub_'):
         topic = data.replace('unsub_', '')
         success = db.unsubscribe(user_id, topic)
@@ -1396,23 +1384,34 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton("◀️ Назад", callback_data="menu_subs")
                 ]])
             )
-    elif data == "save_subscriptions":
+    elif data.startswith('toggle_'):
+        topic = data.replace('toggle_', '')
 
         selected = context.user_data.get('selected_topics', set())
 
+        if topic in selected:
+            selected.remove(topic)
+        else:
+            selected.add(topic)
+
+        context.user_data['selected_topics'] = selected
+
+        await show_search_menu(query, context)
+    elif data == "save_subscriptions":
+        selected = context.user_data.get('selected_topics', set())
+        user_id = query.from_user.id
+
         if not selected:
-            await query.answer("Вы ничего не выбрали")
+            await query.answer("Ничего не выбрано")
             return
 
-        user_id = query.from_user.id
+        db.clear_subscriptions(user_id)
 
         for topic in selected:
             db.subscribe(user_id, topic)
 
-        context.user_data['selected_topics'] = set()
-
         await query.edit_message_text(
-            "✅ Подписки успешно сохранены!",
+            "✅ Подписки обновлены!",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
             ]])
