@@ -993,7 +993,7 @@ async def show_my_subscriptions(query, user_id):
 
     for topic in subscriptions:
         full_name = TOPICS.get(topic, topic)
-        text += f"• {full_name}\n"
+        text += f"• {full_name}\n\n"
 
     keyboard = [
         [InlineKeyboardButton("⚙️ Управлять подписками", callback_data="menu_search")],
