@@ -930,21 +930,41 @@ async def show_current_projects(query, context):
     )
 
 
-async def show_search_menu(query):
+async def show_search_menu(query, context):
+    selected = context.user_data.get('selected_topics', set())
     keyboard = []
     row = []
+
     for i, (topic_code, topic_name) in enumerate(TOPICS.items(), 1):
-        button = InlineKeyboardButton(topic_name, callback_data=f"sub_{topic_code}")
+
+        if topic_code in selected:
+            button_text = f"✅ {topic_name}"
+        else:
+            button_text = topic_name
+
+        button = InlineKeyboardButton(
+            button_text,
+            callback_data=f"toggle_{topic_code}"
+        )
+
         row.append(button)
+
         if i % 2 == 0:
             keyboard.append(row)
             row = []
+
     if row:
         keyboard.append(row)
-    keyboard.append([InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")])
+
+    keyboard.append([
+        InlineKeyboardButton("✅ Сохранить выбор", callback_data="save_subscriptions")
+    ])
+    keyboard.append([
+        InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
+    ])
 
     await query.edit_message_text(
-        "📋 **Выберите темы для подписки:**\n(можно подписаться на несколько)",
+        "📋 **Выберите темы для подписки:**\n(можно несколько)",
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -1376,7 +1396,27 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton("◀️ Назад", callback_data="menu_subs")
                 ]])
             )
+    elif data == "save_subscriptions":
 
+        selected = context.user_data.get('selected_topics', set())
+
+        if not selected:
+            await query.answer("Вы ничего не выбрали")
+            return
+
+        user_id = query.from_user.id
+
+        for topic in selected:
+            db.subscribe(user_id, topic)
+
+        context.user_data['selected_topics'] = set()
+
+        await query.edit_message_text(
+            "✅ Подписки успешно сохранены!",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
+            ]])
+        )
 
 def main():
     if TOKEN == "8218361501:AAFS9tTT2coSdo1Pk2mhWd7odDsjUq41jpQ":
