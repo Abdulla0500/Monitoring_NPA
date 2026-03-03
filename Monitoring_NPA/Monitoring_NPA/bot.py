@@ -266,23 +266,23 @@ def format_project_stage(project):
 def format_project_analyst(project):
     title = project.get("title", "Без названия")
     department = project.get("developedDepartment", {}).get("description", "Не указано")
-    project_type = project.get("projectType", {}).get("description", "")
-    procedure = project.get("procedure", {}).get("description", "")
+    project_type_id = project.get("projectType", {}).get("id", "")
+    project_type = PROJECT_TYPES.get(project_type_id, project.get("projectType", {}).get("description", ""))
+    procedure_id = project.get("procedure", {}).get("id", "")
+    procedure = PROCEDURE_TYPES.get(procedure_id, project.get("procedure", {}).get("description", ""))
     stage = project.get("stage", "")
+    stage_ru = STAGE_DESCRIPTIONS.get(stage, stage)
     status = project.get("status", "")
+    status_ru = STATUS_DESCRIPTIONS.get(status, status)
     pub_date = project.get("publicationDate") or project.get("creationDate")
     project_id = project.get("id")
     topics = project.get("classified_topics", [])
 
-    # Формируем строку с темами
-    topics_block = ""
     if topics:
-        # Берем первую тему для заголовка (или объединяем все)
-        topic_labels = [TOPICS_SHORT.get(t, t) for t in topics[:3]]  # Ограничиваем 3 темами
-        topic_str = " | ".join(topic_labels)
-        if len(topics) > 3:
-            topic_str += f" +{len(topics) - 3}"
-        topics_block = f"**{topic_str}**\n\n"
+        topic_labels = [TOPICS_SHORT.get(t, t) for t in topics]
+        topic_str = "| ".join(topic_labels)
+    else:
+        topic_str = "Не определено"
 
     if pub_date:
         pub_date = pub_date[:10]
@@ -290,12 +290,12 @@ def format_project_analyst(project):
     url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
     text = (
-        f"{topics_block}"
+        f"{topic_str}"
         f"🏢 *{department}*\n\n"
         f"📂 {project_type}\n"
         f"⚖ {procedure}\n\n"
-        f"📍 *Стадия:* {stage}\n"
-        f"🔄 *Статус:* {status}\n"
+        f"📍 *Стадия:* {stage_ru}\n"
+        f"🔄 *Статус:* {status_ru}\n"
         f"📅 {pub_date}\n\n"
         f"📌 *{title}*\n\n"
         f"🔗 {url}\n\n"
@@ -309,17 +309,20 @@ def format_project_lawyer(project):
     title = project.get("title", "Без названия")
     project_number = project.get("projectId", "Не указан")
     department = project.get("developedDepartment", {}).get("description", "Не указано")
-    project_type = project.get("projectType", {}).get("description", "Не указано")
-    procedure = project.get("procedure", {}).get("description", "Не указано")
+    project_type_id = project.get("projectType", {}).get("id", "")
+    project_type = PROJECT_TYPES.get(project_type_id, project.get("projectType", {}).get("description", "Не указано"))
+    procedure_id = project.get("procedure", {}).get("id", "")
+    procedure = PROCEDURE_TYPES.get(procedure_id, project.get("procedure", {}).get("description", "Не указано"))
     stage = project.get("stage", "Не указано")
+    stage_ru = STAGE_DESCRIPTIONS.get(stage, stage)
     status = project.get("status", "Не указано")
+    status_ru = STATUS_DESCRIPTIONS.get(status, status)
     pub_date = project.get("publicationDate") or project.get("creationDate")
     project_id = project.get("id")
     topics = project.get("classified_topics", [])
 
-    # Формируем строку с темами
     if topics:
-        topic_labels = [TOPICS.get(t, t) for t in topics]  # Используем полные названия
+        topic_labels = [TOPICS.get(t, t) for t in topics]
         topic_str = ", ".join(topic_labels)
     else:
         topic_str = "Не определено"
@@ -337,8 +340,8 @@ def format_project_lawyer(project):
         f"🧭 *Тематика:*\n{topic_str}\n\n"
         f"📂 *Тип акта:*\n{project_type}\n\n"
         f"⚖ *Процедура:*\n{procedure}\n\n"
-        f"📍 *Стадия:*\n{stage}\n\n"
-        f"🔄 *Статус:*\n{status}\n\n"
+        f"📍 *Стадия:*\n{stage_ru}\n\n"
+        f"🔄 *Статус:*\n{status_ru}\n\n"
         f"📅 *Дата публикации:*\n{pub_date}\n\n"
         f"🔗 {url}\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -350,19 +353,18 @@ def format_project_lawyer(project):
 def format_project_product(project):
     title = project.get("title", "Без названия")
     department = project.get("developedDepartment", {}).get("description", "Не указано")
-    status = project.get("status", "")
-    pub_date = project.get("publicationDate") or project.get("creationDate")
-    project_type = project.get("projectType", {}).get("description", "")
-    procedure = project.get("procedure", {}).get("description", "")
+    project_type_id = project.get("projectType", {}).get("id", "")
+    project_type = PROJECT_TYPES.get(project_type_id, project.get("projectType", {}).get("description", "Не указано"))
+    procedure_id = project.get("procedure", {}).get("id", "")
+    procedure = PROCEDURE_TYPES.get(procedure_id, project.get("procedure", {}).get("description", "Не указано"))
+    status = project.get("status", "Не указано")
+    status_ru = STATUS_DESCRIPTIONS.get(status, status)
     project_id = project.get("id")
     topics = project.get("classified_topics", [])
 
-    # Формируем строку с темами
     if topics:
-        topic_labels = [TOPICS_SHORT.get(t, t) for t in topics[:2]]  # Ограничиваем 2 темами
+        topic_labels = [TOPICS_SHORT.get(t, t) for t in topics]
         topic_str = " | ".join(topic_labels)
-        if len(topics) > 2:
-            topic_str += f" +{len(topics) - 2}"
     else:
         topic_str = "НПА"
 
@@ -377,7 +379,7 @@ def format_project_product(project):
 
     text = (
         f"🧭 **{topic_str}**\n\n"
-        f"🏢 *{department}* | {status} | {pub_date}\n\n"
+        f"🏢 *{department}* | {status_ru} | {pub_date}\n\n"
         f"📌 *{short_title}*\n\n"
         f"📂 {project_type}\n"
         f"⚖ {procedure}\n\n"
