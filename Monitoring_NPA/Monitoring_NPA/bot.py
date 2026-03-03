@@ -233,11 +233,11 @@ def format_project_stage(project: Dict) -> str:
 
     if status:
         status_desc = STATUS_DESCRIPTIONS.get(status, status)
-        stage_text.append(f"   ⚡ **Статус:** {status_desc}")
+        stage_text.append(f"  ⚡ **Статус:** {status_desc}")
 
     if procedure and procedure.get('id'):
         proc_desc = PROCEDURE_TYPES.get(procedure.get('id'), procedure.get('description', 'Неизвестная процедура'))
-        stage_text.append(f"   🔄 **Процедура:** {proc_desc}")
+        stage_text.append(f"  🔄 **Процедура:** {proc_desc}")
 
     dates = []
     if project.get('startPublicDiscussion') and project.get('endPublicDiscussion'):
