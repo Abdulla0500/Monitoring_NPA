@@ -233,11 +233,11 @@ def format_project_stage(project: Dict) -> str:
 
     if status:
         status_desc = STATUS_DESCRIPTIONS.get(status, status)
-        stage_text.append(f"  ⚡ **Статус:** {status_desc}")
+        stage_text.append(f"\n⚡ **Статус:** {status_desc}")
 
     if procedure and procedure.get('id'):
         proc_desc = PROCEDURE_TYPES.get(procedure.get('id'), procedure.get('description', 'Неизвестная процедура'))
-        stage_text.append(f"  🔄 **Процедура:** {proc_desc}")
+        stage_text.append(f"\n🔄 **Процедура:** {proc_desc}")
 
     dates = []
     if project.get('startPublicDiscussion') and project.get('endPublicDiscussion'):
@@ -1019,7 +1019,7 @@ async def show_archive_topics(query):
     keyboard.append([InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")])
 
     await query.edit_message_text(
-        "🗂 **Архив проектов за 30 дней**\n\nВыберите тему для просмотра:",
+        "🗂 **Архив проектов\n\nВыберите тему для просмотра:",
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -1423,7 +1423,7 @@ def main():
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         send_daily_notifications,
-        trigger=CronTrigger(hour="7", minute='0'),
+        trigger=CronTrigger(hour="6", minute='0'),
         args=[application],
         id='daily_notifications',
         replace_existing=True
