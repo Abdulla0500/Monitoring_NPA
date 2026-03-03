@@ -43,6 +43,8 @@ STAGE_DESCRIPTIONS = {
 
 STATUS_DESCRIPTIONS = {
     'Developing': '🔄 Разработка',
+    'Undefined': '🔄 Разработка',
+    'PreDiscussion': '💬 Предварительное обсуждение',
     'Discussion': '💬 Публичное обсуждение',
     'Evaluation': '📊 Оценка регулирующего воздействия',
     'Conclusion': '📝 Подготовка заключения',
