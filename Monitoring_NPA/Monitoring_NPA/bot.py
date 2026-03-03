@@ -1562,7 +1562,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['selected_topics'] = selected
 
         await show_search_menu(query, context)
-        elif data == "save_subscriptions":
+    elif data == "save_subscriptions":
         selected = context.user_data.get('selected_topics', set())
         user_id = query.from_user.id
 
