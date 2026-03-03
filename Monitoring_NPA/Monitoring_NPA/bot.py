@@ -263,138 +263,99 @@ def format_project_stage(project: Dict) -> str:
     return "\n".join(stage_text)
 
 
-def format_project_analyst(project: Dict) -> str:
-    topics = project.get('classified_topics', [])
-    topic_names = [TOPICS_SHORT.get(t, t) for t in topics] if topics else ['НПА']
-    topic_str = ' '.join(topic_names)
+def format_project_analyst(project):
+    title = project.get("title", "Без названия")
+    department = project.get("developedDepartment", {}).get("description", "Не указано")
+    project_type = project.get("projectType", {}).get("description", "")
+    procedure = project.get("procedure", {}).get("description", "")
+    stage = project.get("stage", "")
+    status = project.get("status", "")
+    pub_date = project.get("publicationDate") or project.get("creationDate")
+    project_id = project.get("id")
 
-    title = project.get('title', 'Без названия')
-    dept = project.get('developedDepartment', {}).get('description', 'Не указано')
-    status = project.get('status', '')
-    status_desc = STATUS_DESCRIPTIONS.get(status, status)
-    published = safe_format_date(project.get('publicationDate') or project.get('creationDate', ''))
-    discussion_end = safe_format_date(project.get('endPublicDiscussion', ''))
-    project_id = project.get('id')
+    if pub_date:
+        pub_date = pub_date[:10]
+
     url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
-    return (
-        f"📌 **Тема:** {topic_str}\n\n"
-        f"📄 **Заголовок:** {title[:100]}...\n\n"
-        f"🏢 **Ведомство:** {dept}\n\n"
-        f"⚡ **Текущий статус:** {status_desc}\n\n"
-        f"📅 **Опубликован:** {published}\n\n"
-        f"⏳ **Обсуждение до:** {discussion_end}\n\n"
+    text = (
+        f"🏢 *{department}*\n"
+        f"📂 {project_type}\n"
+        f"⚖ {procedure}\n\n"
+        f"📍 *Стадия:* {stage}\n"
+        f"🔄 *Статус:* {status}\n"
+        f"📅 {pub_date}\n\n"
+        f"📌 *{title}*\n\n"
         f"🔗 {url}\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
     )
 
+    return text
 
-def format_project_lawyer(project: Dict) -> str:
-    topics = project.get('classified_topics', [])
-    topic_names = [TOPICS_SHORT.get(t, t) for t in topics] if topics else ['НПА']
-    topic_str = ' '.join(topic_names)
 
-    title = project.get('title', 'Без названия')
-    dept = project.get('developedDepartment', {}).get('description', 'Не указано')
-    project_type = project.get('projectType', {})
-    doc_type = PROJECT_TYPES.get(project_type.get('id'), project_type.get('description', 'Проект НПА'))
-    status = project.get('status', '')
-    status_desc = STATUS_DESCRIPTIONS.get(status, status)
-    discussion_start = safe_format_date(project.get('startPublicDiscussion', ''))
-    discussion_end = safe_format_date(project.get('endPublicDiscussion', ''))
-    planned_date = safe_format_date(project.get('plannedEffectiveDate', '') or project.get('deadline', ''))
-    project_id = project.get('id')
+def format_project_lawyer(project):
+    title = project.get("title", "Без названия")
+    project_number = project.get("projectId", "Не указан")
+    department = project.get("developedDepartment", {}).get("description", "Не указано")
+    project_type = project.get("projectType", {}).get("description", "Не указано")
+    procedure = project.get("procedure", {}).get("description", "Не указано")
+    stage = project.get("stage", "Не указано")
+    status = project.get("status", "Не указано")
+    pub_date = project.get("publicationDate") or project.get("creationDate")
+    project_id = project.get("id")
+
+    if pub_date:
+        pub_date = pub_date[:10]
+
     url = f"https://regulation.gov.ru/projects#npa={project_id}"
-    pub_date = project.get('publicationDate') or project.get('creationDate', '')
-    if pub_date and len(pub_date) >= 10:
-        try:
-            pub_date_obj = datetime.strptime(pub_date[:10], '%Y-%m-%d')
-            pub_date_formatted = pub_date_obj.strftime('%d.%m.%Y')
-        except:
-            pub_date_formatted = 'Не указана'
-    else:
-        pub_date_formatted = 'Не указана'
-    return (
-        f"⚖️ **НОВЫЙ ПРОЕКТ НПА (ПОЛНЫЙ ОБЗОР)**\n\n"
-        f"📌 Тематика: {topic_str}\n\n"
-        f"🏢 Разработчик: {dept}\n\n"
-        f"📋 Вид документа: {doc_type}\n\n"
-        f"📄 Заголовок: {title}\n\n"
-        f"⚡ Текущий статус: {status_desc}\n\n"
-        f"📅 Этапы:\n\n"
-        f"   • Начало обсуждения: {discussion_start}\n"
-        f"   • Окончание обсуждения: {discussion_end}\n"
-        f"   • Плановая дата вступления: {planned_date}\n\n"
-        f"📅 Дата публикации: {pub_date_formatted}\n\n"
+
+    text = (
+        "📄 *НОРМАТИВНЫЙ ПРОЕКТ*\n\n"
+        f"📌 *Наименование:*\n{title}\n\n"
+        f"🆔 *Номер проекта:*\n{project_number}\n\n"
+        f"🏢 *Разработчик:*\n{department}\n\n"
+        f"📂 *Тип акта:*\n{project_type}\n\n"
+        f"⚖ *Процедура:*\n{procedure}\n\n"
+        f"📍 *Стадия:*\n{stage}\n\n"
+        f"🔄 *Статус:*\n{status}\n\n"
+        f"📅 *Дата публикации:*\n{pub_date}\n\n"
         f"🔗 {url}\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+
     )
 
-
-def format_project_product(project: Dict) -> str:
-    topics = project.get('classified_topics', [])
-
-    if topics and len(topics) > 0:
-        if isinstance(topics, set):
-            first_topic = next(iter(topics)) if topics else None
-        else:
-            first_topic = topics[0] if topics else None
-        topic_name = TOPICS_SHORT.get(first_topic, first_topic) if first_topic else 'НПА'
-    else:
-        topic_name = 'НПА'
-
-    # Ведомство
-    dept_short = project.get('developedDepartment', {}).get('description', 'Не указано')
-    if dept_short and len(dept_short) > 20:
-        dept_short = dept_short[:20] + '…'
-
-    # Заголовок
-    title = project.get('title', 'Без названия')
+    return text
 
 
-    # Статус
-    status = project.get('status', '')
-    status_desc = STATUS_DESCRIPTIONS.get(status, status)
+def format_project_product(project):
+    title = project.get("title", "Без названия")
+    department = project.get("developedDepartment", {}).get("description", "Не указано")
+    status = project.get("status", "")
+    pub_date = project.get("publicationDate") or project.get("creationDate")
+    project_type = project.get("projectType", {}).get("description", "")
+    procedure = project.get("procedure", {}).get("description", "")
+    project_id = project.get("id")
 
-    discussion_end = project.get('endPublicDiscussion', '')
-    if discussion_end and len(discussion_end) >= 10:
-        try:
-            end_date = datetime.strptime(discussion_end[:10], '%Y-%m-%d')
-            discussion_end_formatted = end_date.strftime('%d.%m.%Y')
-        except:
-            discussion_end_formatted = 'Не указана'
-    else:
-        discussion_end_formatted = 'Не указана'
+    if pub_date:
+        pub_date = pub_date[:10]
 
-    pub_date = project.get('publicationDate') or project.get('creationDate', '')
-    if pub_date and len(pub_date) >= 10:
-        try:
-            pub_date_obj = datetime.strptime(pub_date[:10], '%Y-%m-%d')
-            pub_date_formatted = pub_date_obj.strftime('%d.%m.%Y')
-        except:
-            pub_date_formatted = 'Не указана'
-    else:
-        pub_date_formatted = 'Не указана'
+    # Сильно сокращаем длинные названия
+    short_title = title
+    if len(title) > 120:
+        short_title = title[:117] + "..."
 
-    planned_date = project.get('plannedEffectiveDate', '') or project.get('deadline', '')
-    if planned_date and len(planned_date) >= 10:
-        try:
-            plan_date = datetime.strptime(planned_date[:10], '%Y-%m-%d')
-            planned_date_formatted = plan_date.strftime('%d.%m.%Y')
-        except:
-            planned_date_formatted = 'Не указана'
-    else:
-        planned_date_formatted = 'Не указана'
-    project_id = project.get('id')
     url = f"https://regulation.gov.ru/projects#npa={project_id}"
-    return (
-        f"   • Тема: {title}\n\n"
-        f"     ⚡ Статус: {status_desc}\n\n"
-        f"     📅 Опубликован: {pub_date_formatted}\n\n"
-        f"     ⏳ Обсуждение до: {discussion_end_formatted}\n\n"
-        f"     📌 Вступает: {planned_date_formatted}\n\n"
-        f"     🔗 : {url}\n\n"
+
+    text = (
+        f"🏢 *{department}* | {status} | {pub_date}\n\n"
+        f"📌 *{short_title}*\n\n"
+        f"📂 {project_type}\n"
+        f"⚖ {procedure}\n\n"
+        f"🔗 {url}\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
     )
+
+    return text
 
 
 def format_project_by_role(project: Dict, role: str) -> str:
