@@ -1380,7 +1380,7 @@ async def show_last_projects(query, context, period="7", scope="all"):
         url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
         text += f"{i}. {status_emoji} {topic_str}\n\n"
-        text += f"   📌 {title[:200]}...\n\n"
+        text += f"   📌 {title}...\n\n"
         text += f"   🏢 {dept[:100]}\n\n"
         text += f"   📅 {date[:10] if date else 'Нет даты'}\n\n"
         text += f"   🔗 {url}\n\n"
