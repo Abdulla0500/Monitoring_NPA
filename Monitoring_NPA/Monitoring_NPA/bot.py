@@ -266,20 +266,10 @@ def format_project_stage(project):
 def format_project_analyst(project):
     title = project.get("title", "Без названия")
     department = project.get("developedDepartment", {}).get("description", "Не указано")
-    stage_code = project.get("stage", "")
-    status_code = project.get("status", "")
-    project_type_obj = project.get("projectType", {})
-    procedure_obj = project.get("procedure", {})
-    project_type = PROJECT_TYPES.get(
-        project_type_obj.get("id"),
-        project_type_obj.get("description", "")
-    )
-    procedure = PROCEDURE_TYPES.get(
-        procedure_obj.get("id"),
-        procedure_obj.get("description", "")
-    )
-    stage = STAGE_DESCRIPTIONS.get(stage_code, stage_code)
-    status = STATUS_DESCRIPTIONS.get(status_code, status_code)
+    project_type = project.get("projectType", {}).get("description", "")
+    procedure = project.get("procedure", {}).get("description", "")
+    stage = project.get("stage", "")
+    status = project.get("status", "")
     pub_date = project.get("publicationDate") or project.get("creationDate")
     project_id = project.get("id")
     topics = project.get("classified_topics", [])
@@ -290,7 +280,7 @@ def format_project_analyst(project):
     url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
     text = (
-        f"🧭 *{topic_str}*\n\n"
+        f"**{TOPICS_SHORT.get(topic, topic)}**\n\n"
         f"🏢 *{department}*\n\n"
         f"📂 {project_type}\n"
         f"⚖ {procedure}\n\n"
@@ -309,24 +299,10 @@ def format_project_lawyer(project):
     title = project.get("title", "Без названия")
     project_number = project.get("projectId", "Не указан")
     department = project.get("developedDepartment", {}).get("description", "Не указано")
-    project_type_obj = project.get("projectType", {})
-    procedure_obj = project.get("procedure", {})
-    project_type = PROJECT_TYPES.get(
-        project_type_obj.get("id"),
-        project_type_obj.get("description", "Не указано")
-    )
-    procedure = PROCEDURE_TYPES.get(
-        procedure_obj.get("id"),
-        procedure_obj.get("description", "Не указано")
-    )
-    stage = STAGE_DESCRIPTIONS.get(
-        project.get("stage"),
-        project.get("stage", "Не указано")
-    )
-    status = STATUS_DESCRIPTIONS.get(
-        project.get("status"),
-        project.get("status", "Не указано")
-    )
+    project_type = project.get("projectType", {}).get("description", "Не указано")
+    procedure = project.get("procedure", {}).get("description", "Не указано")
+    stage = project.get("stage", "Не указано")
+    status = project.get("status", "Не указано")
     pub_date = project.get("publicationDate") or project.get("creationDate")
     project_id = project.get("id")
     topics = project.get("classified_topics", [])
@@ -359,22 +335,10 @@ def format_project_lawyer(project):
 def format_project_product(project):
     title = project.get("title", "Без названия")
     department = project.get("developedDepartment", {}).get("description", "Не указано")
-    status = STATUS_DESCRIPTIONS.get(
-        project.get("status"),
-        project.get("status", "")
-    )
-    project_type_obj = project.get("projectType", {})
-    procedure_obj = project.get("procedure", {})
-    project_type = PROJECT_TYPES.get(
-        project_type_obj.get("id"),
-        project_type_obj.get("description", "Не указано")
-    )
-    procedure = PROCEDURE_TYPES.get(
-        procedure_obj.get("id"),
-        procedure_obj.get("description", "Не указано")
-    )
+    status = project.get("status", "")
     pub_date = project.get("publicationDate") or project.get("creationDate")
-
+    project_type = project.get("projectType", {}).get("description", "")
+    procedure = project.get("procedure", {}).get("description", "")
     project_id = project.get("id")
     topics = project.get("classified_topics", [])
     topic_str = ", ".join(topics) if topics else ""
