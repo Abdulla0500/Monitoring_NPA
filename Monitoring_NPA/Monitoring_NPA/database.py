@@ -269,9 +269,15 @@ class Database:
 
     def save_project(self, project):
         from classifier import ProjectClassifier
-        topics = ProjectClassifier.classify(
-            title=project.get('title', '')
-        )
+        text_parts = [
+            project.get('title', ''),
+            project.get('summary', ''),
+            project.get('description', ''),
+        ]
+
+        full_text = " ".join([t for t in text_parts if t])
+
+        topics = ProjectClassifier.classify(full_text)
 
         try:
             self.cursor.execute('''

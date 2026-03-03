@@ -110,7 +110,7 @@ class ProjectClassifier:
             "единое информационное пространство",
             "единые требования к форматам электронных документов",
             "цифровые шаблоны документов",
-
+            "кадрового электронного документооборота",
             "Кадровый электронный документооборот",
             "трудовой договор в электронной форме",
             "кадровые документы",
@@ -130,6 +130,7 @@ class ProjectClassifier:
             "электронный кадровый документ",
             "кадровый документооборот",
             "кадровые документы",
+            "персонифицированного учета",
             " № 578н",
             "Требования к информационным системам",
             "Перечень типовых управленческих архивных документов",
@@ -241,6 +242,8 @@ class ProjectClassifier:
             'электронная отчетность',
             'банк данных о законных представителях лиц, имеющих право на получение мер социальной защиты',
             'патентная система',
+            "финансовой отчетности",
+            "сдачи отчетности",
             'косвенные налоги',
             'пояснения налогоплательщика',
             'налоговая отчетность',
@@ -371,11 +374,11 @@ class ProjectClassifier:
 
 
     @classmethod
-    def classify(cls, title: str) -> Set[str]:
-        if not title:
+    def classify(cls, text: str) -> Set[str]:
+        if not text:
             return set()
 
-        title_lower = title.lower()
+        text_lower = text.lower()
         found_topics = set()
 
         for topic, keywords in cls.KEYWORDS.items():
@@ -383,12 +386,12 @@ class ProjectClassifier:
             # Проверяем исключения
             exclude_patterns = cls.EXCLUDE_PATTERNS.get(topic, [])
             for exclude in exclude_patterns:
-                if cls._matches(title_lower, exclude):
+                if cls._matches(text_lower, exclude):
                     break
             else:
                 # Проверяем ключевые слова
                 for keyword in keywords:
-                    if cls._matches(title_lower, keyword):
+                    if cls._matches(text_lower, keyword):
                         found_topics.add(topic)
                         break
 
