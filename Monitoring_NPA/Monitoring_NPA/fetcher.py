@@ -61,24 +61,38 @@ class RegulationAPI:
             lines.append(text[i:i + width])
         return '\n'.join(lines)
 
-    def fetch_all_projects_full(self):
-        first_page = self.fetch_projects(page=1)
-        if not first_page:
+    def fetch_all_projects_full(self, page_size=20):
+        print("=" * 70)
+        print("🗂 ПОЛНАЯ ЗАГРУЗКА ВСЕХ ПРОЕКТОВ (ARCHIVE)")
+        print("=" * 70)
+
+        all_projects = []
+
+        # 1️⃣ Первая страница
+        projects, total_count = self.fetch_projects(page=1, pageSize=page_size)
+
+        if not projects:
             return []
 
-        total = first_page.get("total", 0)
-        page_size = first_page.get("size", 50)
+        all_projects.extend(projects)
 
-        total_pages = math.ceil(total / page_size)
+        total_pages = math.ceil(total_count / page_size)
 
-        all_projects = first_page.get("content", [])
+        print(f"📊 Всего проектов: {total_count}")
+        print(f"📄 Всего страниц: {total_pages}")
 
+        # 2️⃣ Остальные страницы
         for page in range(2, total_pages + 1):
-            data = self.fetch_projects(page=page)
-            if data:
-                all_projects.extend(data.get("content", []))
+            projects, _ = self.fetch_projects(page=page, pageSize=page_size)
+            all_projects.extend(projects)
 
-        return all_projects
+        # 3️⃣ Убираем дубликаты
+        unique = {p['id']: p for p in all_projects}.values()
+        projects_list = list(unique)
+
+        print(f"🎯 ИТОГО ЗАГРУЖЕНО: {len(projects_list)} ПРОЕКТОВ")
+
+        return projects_list
     def fetch_all_projects(self, max_pages=500, page_size=20):
         print("=" * 70)
         print("🚀 ЗАГРУЗКА ВСЕХ ПРОЕКТОВ")

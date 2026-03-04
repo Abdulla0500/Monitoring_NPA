@@ -967,7 +967,9 @@ async def show_archive_projects(query, context, topic):
     all_projects = projects_cache.get(all_projects_cache_key)
 
     if all_projects is None:
-        all_projects = await fetch_with_retry_simple(api.fetch_all_projects, max_retries=3, delay=2, max_pages=2500)
+        all_projects = await fetch_with_retry_simple(api.fetch_all_projects_full,
+        max_retries=3,
+        delay=2)
         if all_projects:
             projects_cache.set(all_projects_cache_key, all_projects)
             logger.info(f"Cached {len(all_projects)} projects for all topics")
@@ -1511,7 +1513,7 @@ def main():
 
     scheduler.add_job(
         warm_up_archive_cache,
-        trigger=CronTrigger(hour=9 , minute=31),
+        trigger=CronTrigger(hour=9 , minute=39),
         args=[application],
         id='archive_cache_warmup',
         replace_existing=True
