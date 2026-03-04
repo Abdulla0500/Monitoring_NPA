@@ -1,7 +1,7 @@
 import requests
 import json
 from classifier import ProjectClassifier
-
+import math
 
 class RegulationAPI:
     def __init__(self):
@@ -17,7 +17,6 @@ class RegulationAPI:
         })
 
     def fetch_projects(self, page=1, pageSize=20):
-        """Загружает одну страницу проектов"""
         url = "https://regulation.gov.ru/api/public/PublicProjects/GetFiltered"
 
         payload = {
@@ -40,15 +39,17 @@ class RegulationAPI:
             if response.status_code == 200:
                 data = response.json()
                 projects = data.get('result', [])
+                total_count = data.get('totalCount', 0)
+
                 print(f"   ✅ Страница {page}: {len(projects)} проектов")
-                return projects
+                return projects, total_count
             else:
                 print(f"   ❌ Ошибка {response.status_code} на странице {page}")
-                return []
+                return [], 0
 
         except Exception as e:
             print(f"   ❌ Ошибка: {e}")
-            return []
+            return [], 0
 
     def wrap_text(self, text, width=60):
         """Разбивает текст на строки по width символов"""
@@ -60,25 +61,41 @@ class RegulationAPI:
             lines.append(text[i:i + width])
         return '\n'.join(lines)
 
-    def fetch_all_projects(self, max_pages=100):
-        """Загружает ВСЕ доступные страницы"""
+    def fetch_all_projects(self, max_pages=500, page_size=20):
         print("=" * 70)
         print("🚀 ЗАГРУЗКА ВСЕХ ПРОЕКТОВ")
         print("=" * 70)
 
         all_projects = []
 
-        for page in range(1, max_pages + 1):
-            projects = self.fetch_projects(page=page, pageSize=20)
+        # === 1. Загружаем первую страницу ===
+        projects, total_count = self.fetch_projects(page=1, pageSize=page_size)
 
-            if not projects:
-                print(f"\n📦 Остановлено на странице {page} — проекты кончились")
-                break
+        if not projects:
+            print("❌ Не удалось получить первую страницу")
+            return []
+
+        all_projects.extend(projects)
+
+        # === 2. Считаем общее количество страниц ===
+        total_pages = math.ceil(total_count / page_size)
+
+        print(f"\n📊 Всего проектов в API: {total_count}")
+        print(f"📄 Всего страниц: {total_pages}")
+
+        # Ограничиваем max_pages
+        pages_to_load = min(total_pages, max_pages)
+
+        print(f"📥 Будем загружать: {pages_to_load} страниц\n")
+
+        # === 3. Загружаем остальные страницы ===
+        for page in range(2, pages_to_load + 1):
+            projects, _ = self.fetch_projects(page=page, pageSize=page_size)
 
             all_projects.extend(projects)
             print(f"   📊 Всего проектов: {len(all_projects)}")
 
-        # Убираем дубликаты
+        # === 4. Убираем дубликаты ===
         unique = {p['id']: p for p in all_projects}.values()
         projects_list = list(unique)
 
