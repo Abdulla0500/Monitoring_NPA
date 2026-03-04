@@ -598,7 +598,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(welcome_text, parse_mode='Markdown', reply_markup=get_main_menu_keyboard())
 
-
 async def send_daily_notifications(application: Application):
     logger.info("🕐 Запуск ежедневной рассылки уведомлений")
 
@@ -610,15 +609,11 @@ async def send_daily_notifications(application: Application):
     now = datetime.now()
     weekday = now.weekday()  # 0=пн, 6=вск
 
-    if weekday == 5:
-        logger.info("Сегодня суббота — уведомления не отправляем")
+    if weekday in (5, 6):
+        logger.info("Сегодня выходной — уведомления не отправляем")
         return
 
-    elif weekday == 6:
-        logger.info("Сегодня воскресенье — уведомления не отправляем")
-        return
-
-    elif weekday == 0:
+    if weekday == 0:
         dates_to_check = [
             (now - timedelta(days=3)).date(),
             (now - timedelta(days=2)).date(),
@@ -626,6 +621,9 @@ async def send_daily_notifications(application: Application):
         ]
     else:
         dates_to_check = [(now - timedelta(days=1)).date()]
+
+    start_date = min(dates_to_check)
+    end_date = max(dates_to_check)
 
     date_range_key = "_".join([d.strftime("%Y%m%d") for d in dates_to_check])
     cache_key = f"daily_projects_{date_range_key}"
@@ -639,14 +637,14 @@ async def send_daily_notifications(application: Application):
             delay=2,
             max_pages=20
         )
-        if projects:
+        if projects is not None:
             projects_cache.set(cache_key, projects)
 
-    if not projects:
-        logger.error("Не удалось загрузить проекты для уведомлений")
+    if projects is None:
+        logger.error("Не удалось загрузить проекты")
         return
 
-    projects_for_notification = []
+    projects_for_period = []
 
     for p in projects:
         date_str = p.get('publicationDate') or p.get('creationDate')
@@ -660,13 +658,10 @@ async def send_daily_notifications(application: Application):
 
         if project_date in dates_to_check:
             topics = ProjectClassifier.classify_as_list(title=p.get('title', ''))
-            if topics:
-                p['classified_topics'] = topics
-                projects_for_notification.append(p)
+            p['classified_topics'] = topics
+            projects_for_period.append(p)
 
-    if not projects_for_notification:
-        logger.info("Нет проектов для уведомлений")
-        return
+    logger.info(f"Найдено проектов за период: {len(projects_for_period)}")
 
     sent_count = 0
     current_time_str = now.strftime("%H:%M")
@@ -687,12 +682,11 @@ async def send_daily_notifications(application: Application):
             continue
 
         user_projects = []
-        for p in projects_for_notification:
-            if set(p['classified_topics']).intersection(set(user_subs)):
-                user_projects.append(p)
 
-        start_date = min(dates_to_check)
-        end_date = max(dates_to_check)
+        for p in projects_for_period:
+            topics = p.get('classified_topics', [])
+            if set(topics).intersection(set(user_subs)):
+                user_projects.append(p)
 
         if user_projects:
             message = format_projects_notification(
@@ -714,16 +708,16 @@ async def send_daily_notifications(application: Application):
                 text=message,
                 parse_mode='Markdown'
             )
+
             projects_cache.set(today_key, True)
             sent_count += 1
             logger.info(f"Уведомление отправлено пользователю {user_id}")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.4)
 
         except Exception as e:
-            logger.error(f"Ошибка отправки уведомления пользователю {user_id}: {e}")
+            logger.error(f"Ошибка отправки пользователю {user_id}: {e}")
 
     logger.info(f"Рассылка завершена. Отправлено: {sent_count}")
-
 async def show_current_projects(query, context):
     await query.edit_message_text("🔍 Загружаю текущие проекты по вашим подпискам...")
 
@@ -1156,7 +1150,7 @@ async def show_time_selection(query):
     current_time = db.get_notification_time(query.from_user.id)
 
     keyboard = []
-    times = ["06:00", "07:00","08:15", "08:00", "09:00", "10:00",
+    times = ["06:00", "07:00","08:25", "08:00", "09:00", "10:00",
              "12:00", "15:00", "18:00"]
 
     for t in times:
