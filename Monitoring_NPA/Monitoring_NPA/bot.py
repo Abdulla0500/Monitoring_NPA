@@ -144,7 +144,7 @@ class Cache:
         self.cache = OrderedDict()
         self.timestamps = {}
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key):
         if key in self.cache:
             if time.time() - self.timestamps[key] < self.ttl:
                 self.cache.move_to_end(key)
@@ -153,7 +153,7 @@ class Cache:
                 self.delete(key)
         return None
 
-    def set(self, key: str, value: Any):
+    def set(self, key, value):
         if key in self.cache:
             self.cache.move_to_end(key)
         self.cache[key] = value
@@ -162,7 +162,7 @@ class Cache:
             oldest_key, _ = self.cache.popitem(last=False)
             self.timestamps.pop(oldest_key, None)
 
-    def delete(self, key: str):
+    def delete(self, key):
         if key in self.cache:
             self.cache.pop(key)
             self.timestamps.pop(key, None)
@@ -171,7 +171,7 @@ class Cache:
         self.cache.clear()
         self.timestamps.clear()
 
-    def get_stats(self) -> Dict:
+    def get_stats(self):
         return {
             "size": len(self.cache),
             "max_size": self.max_size,
@@ -210,17 +210,6 @@ def safe_get_date_str(date_value):
     if isinstance(date_value, datetime):
         return date_value.strftime('%Y-%m-%d')
     return None
-
-
-def safe_format_date(date_str):
-    if date_str and isinstance(date_str, str) and len(date_str) >= 10:
-        try:
-            date_obj = datetime.strptime(date_str[:10], '%Y-%m-%d')
-            return date_obj.strftime('%d.%m.%Y')
-        except (ValueError, TypeError):
-            return 'Неверный формат'
-    return 'Не указана'
-
 
 def get_stage_emoji(stage):
     emoji_map = {
@@ -264,27 +253,6 @@ def format_project_stage(project):
         proc_desc = PROCEDURE_TYPES.get(procedure.get('id'), procedure.get('description', 'Неизвестная процедура'))
         stage_text.append(f"\n🔄 **Процедура:** {proc_desc}")
 
-    dates = []
-    if project.get('startPublicDiscussion') and project.get('endPublicDiscussion'):
-        start = safe_get_date_str(project['startPublicDiscussion'])
-        end = safe_get_date_str(project['endPublicDiscussion'])
-        if start and end:
-            dates.append(f"🗓 **Публичное обсуждение:** {start} - {end}")
-
-    if project.get('startParallelPublicDiscussion') and project.get('endParallelPublicDiscussion'):
-        start = safe_get_date_str(project['startParallelPublicDiscussion'])
-        end = safe_get_date_str(project['endParallelPublicDiscussion'])
-        if start and end:
-            dates.append(f"🔄 **Параллельное обсуждение:** {start} - {end}")
-
-    if project.get('deadline'):
-        deadline = safe_get_date_str(project['deadline'])
-        if deadline:
-            dates.append(f"⏰ **Крайний срок:** {deadline}")
-
-    if dates:
-        stage_text.append("\n".join(dates))
-
     return "\n".join(stage_text)
 
 
@@ -321,10 +289,10 @@ def format_project_analyst(project):
         f"⚖ {procedure}\n\n"
         f"📍 *Стадия:* {stage_ru}\n"
         f"🔄 *Статус:* {status_ru}\n"
-        f"📅 {pub_date}\n\n"
+        f"📅 *Дата публикации:* {pub_date}\n\n"
         f"📌 *{title}*\n\n"
         f"🔗 {url}\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━━\n\n"
     )
 
     return text
@@ -350,7 +318,7 @@ def format_project_lawyer(project):
         topic_labels = [TOPICS.get(t, t) for t in topics]
         topic_str = ", ".join(topic_labels)
     else:
-        topic_str = "Не определено"
+        topic_str = "НПА"
 
     if pub_date:
         pub_date = pub_date[:10]
@@ -359,17 +327,17 @@ def format_project_lawyer(project):
 
     text = (
         "📄 *НОРМАТИВНЫЙ ПРОЕКТ*\n\n"
-        f"📌 *Наименование:*\n{title}\n\n"
-        f"🆔 *Номер проекта:*\n{project_number}\n\n"
-        f"🏢 *Разработчик:*\n{department}\n\n"
-        f"🧭 *Тематика:*\n{topic_str}\n\n"
-        f"📂 *Тип акта:*\n{project_type}\n\n"
-        f"⚖ *Процедура:*\n{procedure}\n\n"
-        f"📍 *Стадия:*\n{stage_ru}\n\n"
-        f"🔄 *Статус:*\n{status_ru}\n\n"
-        f"📅 *Дата публикации:*\n{pub_date}\n\n"
+        f"📌 *Наименование:* {title}\n\n"
+        f"🆔 *Номер проекта:* {project_number}\n\n"
+        f"🏢 *Разработчик:* {department}\n\n"
+        f"🧭 *Тематика:* {topic_str}\n\n"
+        f"📂 *Тип акта:* {project_type}\n\n"
+        f"⚖ *Процедура:* {procedure}\n\n"
+        f"📍 *Стадия:* {stage_ru}\n\n"
+        f"🔄 *Статус:* {status_ru}\n\n"
+        f"📅 *Дата публикации:* {pub_date}\n\n"
         f"🔗 {url}\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━━\n\n"
     )
 
     return text
@@ -386,7 +354,7 @@ def format_project_product(project):
     status_ru = STATUS_DESCRIPTIONS.get(status, status)
     project_id = project.get("id")
     topics = project.get("classified_topics", [])
-
+    pub_date = project.get("publicationDate") or project.get("creationDate")
     if topics:
         topic_labels = [TOPICS_SHORT.get(t, t) for t in topics]
         topic_str = " | ".join(topic_labels)
@@ -406,16 +374,16 @@ def format_project_product(project):
         f"🧭 **{topic_str}**\n\n"
         f"🏢 *{department}* | {status_ru} | {pub_date}\n\n"
         f"📌 *{short_title}*\n\n"
-        f"📂 {project_type}\n"
+        f"📂 {project_type}\n\n"
         f"⚖ {procedure}\n\n"
         f"🔗 {url}\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━━\n\n"
     )
 
     return text
 
 
-def format_project_by_role(project: Dict, role: str) -> str:
+def format_project_by_role(project, role):
     if role == 'analyst':
         return format_project_analyst(project)
     elif role == 'lawyer':
@@ -425,9 +393,14 @@ def format_project_by_role(project: Dict, role: str) -> str:
     return format_project_analyst(project)
 
 
-def format_weekly_digest(projects: List[Dict], start_date: datetime, end_date: datetime) -> str:
+def format_weekly_digest(projects: List, start_date, end_date):
     start_str = start_date.strftime('%d.%m')
     end_str = end_date.strftime('%d.%m')
+
+    if (end_date - start_date).days <= 7:
+        text = f"📊 **НЕДЕЛЬНЫЙ ДАЙДЖЕСТ ({start_str}–{end_str})**\n\n"
+    else:
+        text = f"📊 **СВОДКА ЗА ПЕРИОД ({start_str}–{end_str})**\n\n"
 
     text = f"📊 **ЕЖЕНЕДЕЛЬНЫЙ ДАЙДЖЕСТ НПА ({start_str}–{end_str})**\n\n"
     text += f"📈 Всего новых проектов: {len(projects)}\n"
@@ -446,7 +419,7 @@ def format_weekly_digest(projects: List[Dict], start_date: datetime, end_date: d
 
     for topic, projs in by_topic.items():
         topic_name = TOPICS_SHORT.get(topic, topic)
-        text += f"### {topic_name}\n"
+        text += f"\n━━━━━━━ {topic_name} ━━━━━━━\n\n"
         for p in projs:
             text += format_project_product(p)
         text += "\n"
@@ -479,20 +452,9 @@ def format_weekly_digest(projects: List[Dict], start_date: datetime, end_date: d
     text += "📌 **Рекомендации по roadmap:**\n\n"
     return text
 
-
-def format_digest_by_role(projects: List[Dict], role: str, start_date: datetime, end_date: datetime) -> str:
-    if role == 'product':
-        return format_weekly_digest(projects, start_date, end_date)
-    text = f"📅 **Дайджест за {start_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}**\n\n"
-    for i, p in enumerate(projects, 1):
-        text += f"{i}. {format_project_by_role(p, role)}\n"
-        text += "━" * 24 + "\n"
-    return text
-
 def format_projects_notification(projects, subs, start_date, end_date):
     from datetime import datetime
 
-    # --- Формируем диапазон дат ---
     if start_date == end_date:
         date_str = start_date.strftime("%d.%m.%Y")
         header = f"📅 *Проекты за {date_str}*\n\n"
@@ -1594,7 +1556,7 @@ def main():
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         send_daily_notifications,
-        trigger=CronTrigger(hour="*"),
+        trigger=CronTrigger(minute="*"),
         args=[application],
         id='daily_notifications',
         replace_existing=True
