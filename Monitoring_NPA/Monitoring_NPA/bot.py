@@ -498,8 +498,8 @@ def format_no_projects_notification(subs, start_date, end_date):
             f"новых проектов не найдено*\n\n"
         )
 
-    header += "🔔 *Ваши подписки:*\n"
-    header += ", ".join([TOPICS_SHORT.get(s, s) for s in subs])
+    header += "🔔 *Ваши подписки:*\n\n"
+    header += "\n\n ".join([TOPICS_SHORT.get(s, s) for s in subs])
 
     header += "\n\nВы получите уведомление, как только появятся новые проекты."
 
@@ -1150,7 +1150,7 @@ async def show_time_selection(query):
     current_time = db.get_notification_time(query.from_user.id)
 
     keyboard = []
-    times = ["06:00", "07:00","08:27", "08:00", "09:00", "10:00",
+    times = ["06:00", "07:00", "08:00", "09:00", "10:00",
              "12:00", "15:00", "18:00"]
 
     for t in times:
