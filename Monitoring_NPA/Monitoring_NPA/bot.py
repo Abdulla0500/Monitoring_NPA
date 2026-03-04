@@ -1316,9 +1316,9 @@ async def show_last_projects(query, context, period="7", scope="all"):
 async def warm_up_cache(application: Application):
     logger.info("🔥 Прогрев кеша проектов")
 
-    cache_key = f"all_projects_{datetime.now().strftime('%Y%m%d')}"
+    cache_key_projects = f"all_projects_{datetime.now().strftime('%Y%m%d_%H')}"
 
-    if projects_cache.get(cache_key):
+    if projects_cache.get(cache_key_projects):
         logger.info("Кеш уже прогрет")
         return
 
@@ -1330,7 +1330,7 @@ async def warm_up_cache(application: Application):
     )
 
     if projects:
-        projects_cache.set(cache_key, projects)
+        projects_cache.set(cache_key_projects, projects)
         logger.info(f"Кеш прогрет: {len(projects)} проектов")
     else:
         logger.error("Не удалось прогреть кеш")
@@ -1467,7 +1467,7 @@ def main():
     )
     scheduler.add_job(
         warm_up_cache,
-        trigger=CronTrigger(hour=8, minute=43),
+        trigger=CronTrigger(hour=8, minute=49),
         args=[application],
         id='cache_warmup',
         replace_existing=True
