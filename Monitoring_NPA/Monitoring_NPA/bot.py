@@ -1150,7 +1150,7 @@ async def show_time_selection(query):
     current_time = db.get_notification_time(query.from_user.id)
 
     keyboard = []
-    times = ["06:00", "07:00", "08:31", "09:00", "10:00",
+    times = ["06:00", "07:00", "08:00", "09:00", "10:00",
              "12:00", "15:00", "18:00"]
 
     for t in times:
@@ -1297,7 +1297,7 @@ async def show_last_projects(query, context, period="7", scope="all"):
         url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
         text += f"{i}. {status_emoji} {topic_str}\n\n"
-        text += f"   📌 {title}...\n\n"
+        text += f"   📌 {title}\n\n"
         text += f"   🏢 {dept[:100]}\n\n"
         text += f"   📅 {date[:10] if date else 'Нет даты'}\n\n"
         text += f"   🔗 {url}\n\n"
