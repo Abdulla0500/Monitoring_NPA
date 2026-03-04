@@ -540,13 +540,65 @@ async def split_long_message_for_query(query, text, parse_mode = 'Markdown', rep
                 await query.message.reply_text(part, parse_mode=parse_mode, reply_markup=reply_markup)
             else:
                 await query.message.reply_text(part, parse_mode=parse_mode)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
         except Exception as e:
             logger.error(f"Error sending part {i}: {e}")
 
     return None
 
 
+async def send_projects_chunked(query, projects, user_role, start_index=0, chunk_size=50):
+    """
+    Отправляет проекты чанками по 50 штук с кнопкой "Продолжить"
+
+    Args:
+        query: callback query
+        projects: список проектов
+        user_role: роль пользователя
+        start_index: с какого индекса начинать
+        chunk_size: сколько проектов показывать за раз
+    """
+    total_projects = len(projects)
+    end_index = min(start_index + chunk_size, total_projects)
+
+    # Берем текущий кусок проектов
+    current_chunk = projects[start_index:end_index]
+
+    # Формируем заголовок
+    text = f"📋 **Текущие проекты (активные)**\n\n"
+    text += f"📊 По вашим подпискам: **{total_projects}** проектов в работе\n"
+    text += f"📄 Показано {start_index + 1}-{end_index} из {total_projects}\n\n"
+    text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+
+    # Добавляем проекты текущего куска
+    for i, p in enumerate(current_chunk, start=start_index + 1):
+        status = p.get('status', '')
+        status_emoji = get_status_emoji(status)
+        project_text = format_project_by_role(p, user_role)
+        text += f"**{i}.** {status_emoji} {project_text}\n"
+
+    # Создаем клавиатуру
+    keyboard = []
+
+    # Если есть еще проекты, добавляем кнопку "Продолжить"
+    if end_index < total_projects:
+        keyboard.append([
+            InlineKeyboardButton(
+                f"▶️ Продолжить ({end_index + 1}-{min(end_index + chunk_size, total_projects)} из {total_projects})",
+                callback_data=f"continue_{start_index + chunk_size}"
+            )
+        ])
+
+    # Кнопка возврата в меню
+    keyboard.append([InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")])
+
+    await split_long_message_for_query(
+        query,
+        text,
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    
 async def fetch_with_retry_simple(fetch_func, max_retries=3, delay=2, *args, **kwargs):
     func_with_args = partial(fetch_func, *args, **kwargs)
     for attempt in range(1, max_retries + 1):
@@ -1513,7 +1565,7 @@ def main():
 
     scheduler.add_job(
         warm_up_archive_cache,
-        trigger=CronTrigger(hour=9 , minute=39),
+        trigger=CronTrigger(hour=3 , minute=0),
         args=[application],
         id='archive_cache_warmup',
         replace_existing=True
