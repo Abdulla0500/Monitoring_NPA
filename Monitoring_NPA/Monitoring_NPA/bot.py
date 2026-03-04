@@ -1150,7 +1150,7 @@ async def show_time_selection(query):
     current_time = db.get_notification_time(query.from_user.id)
 
     keyboard = []
-    times = ["06:00", "07:00", "08:00", "09:00", "10:00",
+    times = ["06:00", "07:00", "08:31", "09:00", "10:00",
              "12:00", "15:00", "18:00"]
 
     for t in times:
