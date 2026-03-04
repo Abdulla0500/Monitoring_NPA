@@ -180,7 +180,7 @@ class Cache:
         }
 
 
-projects_cache = Cache(max_size=1000, ttl=36000)
+projects_cache = Cache(max_size=1000, ttl=90000)
 user_subs_cache = Cache(max_size=1000, ttl=36000)
 
 
@@ -566,7 +566,11 @@ async def fetch_with_retry_simple(fetch_func, max_retries=3, delay=2, *args, **k
             await asyncio.sleep(wait_time)
     logger.error(f"Все {max_retries} попыток провалились")
     return None
+def get_hourly_cache_key():
+    return f"projects_hourly_{datetime.now().strftime('%Y%m%d_%H')}"
 
+def get_archive_cache_key():
+    return f"projects_archive_{datetime.now().strftime('%Y%m%d')}"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -737,7 +741,7 @@ async def show_current_projects(query, context):
         )
         return
 
-    cache_key_projects = f"all_projects_{datetime.now().strftime('%Y%m%d_%H')}"
+    cache_key_projects = get_hourly_cache_key()
     projects = projects_cache.get(cache_key_projects)
 
     if projects is None:
@@ -784,7 +788,7 @@ async def show_current_projects(query, context):
     today = datetime.now().date()
 
     for p in projects:
-        topics = ProjectClassifier.classify_as_list(title=p.get('title', ''))
+        topics = p.get('classified_topics', [])
         project_topics = set(topics)
         user_topics_set = set(user_subs)
 
@@ -959,7 +963,7 @@ async def show_archive_projects(query, context, topic):
     await query.answer()
     await query.edit_message_text(f"🔍 Загружаю архив проектов по теме {TOPICS_SHORT.get(topic, topic)}...")
 
-    all_projects_cache_key = f"all_projects_{datetime.now().strftime('%Y%m%d')}"
+    all_projects_cache_key = get_archive_cache_key()
     all_projects = projects_cache.get(all_projects_cache_key)
 
     if all_projects is None:
@@ -980,7 +984,7 @@ async def show_archive_projects(query, context, topic):
 
     filtered_projects = []
     for p in all_projects:
-        p_topics = ProjectClassifier.classify_as_list(title=p.get('title', ''))
+        p_topics = p.get('classified_topics', [])
         if topic in p_topics:
             p['classified_topics'] = p_topics
             filtered_projects.append(p)
@@ -1213,7 +1217,7 @@ async def show_last_projects(query, context, period="7", scope="all"):
         start_date = today - timedelta(days=7)
         period_label = "за 7 дней"
 
-    cache_key = f"last_projects_{datetime.now().strftime('%Y%m%d_%H')}"
+    cache_key = get_hourly_cache_key()
     projects = projects_cache.get(cache_key)
 
     if projects is None:
@@ -1312,11 +1316,37 @@ async def show_last_projects(query, context, period="7", scope="all"):
         ]])
     )
 
+async def warm_up_archive_cache(application):
+    logger.info("🗂 Прогрев архивного кеша")
 
-async def warm_up_cache(application: Application):
+    cache_key = get_archive_cache_key()
+
+    if projects_cache.get(cache_key):
+        logger.info("Архивный кеш уже существует")
+        return
+
+    projects = await fetch_with_retry_simple(
+        api.fetch_all_projects_full,
+        max_retries=3,
+        delay=2
+    )
+    if projects:
+        for p in projects:
+            p['classified_topics'] = ProjectClassifier.classify_as_list(
+                title=p.get('title', '')
+            )
+
+        projects_cache.set(cache_key, projects)
+    if projects:
+        projects_cache.set(cache_key, projects)
+        logger.info(f"Архивный кеш прогрет: {len(projects)} проектов")
+    else:
+        logger.error("Ошибка прогрева архивного кеша")
+
+async def warm_up_cache(application):
     logger.info("🔥 Прогрев кеша проектов")
 
-    cache_key_projects = f"all_projects_{datetime.now().strftime('%Y%m%d_%H')}"
+    cache_key_projects = get_hourly_cache_key()
 
     if projects_cache.get(cache_key_projects):
         logger.info("Кеш уже прогрет")
@@ -1328,7 +1358,13 @@ async def warm_up_cache(application: Application):
         delay=2,
         max_pages=500
     )
+    if projects:
+        for p in projects:
+            p['classified_topics'] = ProjectClassifier.classify_as_list(
+                title=p.get('title', '')
+            )
 
+        projects_cache.set(cache_key_projects, projects)
     if projects:
         projects_cache.set(cache_key_projects, projects)
         logger.info(f"Кеш прогрет: {len(projects)} проектов")
@@ -1467,9 +1503,17 @@ def main():
     )
     scheduler.add_job(
         warm_up_cache,
-        trigger=CronTrigger(hour=8, minute=58),
+        trigger=CronTrigger(minute=0),
         args=[application],
         id='cache_warmup',
+        replace_existing=True
+    )
+
+    scheduler.add_job(
+        warm_up_archive_cache,
+        trigger=CronTrigger(hour=9 , minute=31),
+        args=[application],
+        id='archive_cache_warmup',
         replace_existing=True
     )
 

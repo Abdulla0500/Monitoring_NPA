@@ -61,6 +61,24 @@ class RegulationAPI:
             lines.append(text[i:i + width])
         return '\n'.join(lines)
 
+    def fetch_all_projects_full(self):
+        first_page = self.fetch_projects(page=1)
+        if not first_page:
+            return []
+
+        total = first_page.get("total", 0)
+        page_size = first_page.get("size", 50)
+
+        total_pages = math.ceil(total / page_size)
+
+        all_projects = first_page.get("content", [])
+
+        for page in range(2, total_pages + 1):
+            data = self.fetch_projects(page=page)
+            if data:
+                all_projects.extend(data.get("content", []))
+
+        return all_projects
     def fetch_all_projects(self, max_pages=500, page_size=20):
         print("=" * 70)
         print("🚀 ЗАГРУЗКА ВСЕХ ПРОЕКТОВ")
