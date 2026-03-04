@@ -211,16 +211,6 @@ def safe_get_date_str(date_value):
         return date_value.strftime('%Y-%m-%d')
     return None
 
-def get_stage_emoji(stage):
-    emoji_map = {
-        'Text': '📝', 'Discussion': '💬', 'Evaluation': '📊',
-        'Expertise': '🔍', 'Approval': '✅', 'Signing': '✍️',
-        'Registration': '📋', 'Publication': '📢', 'Cancelled': '❌',
-        'Completed': '✔️'
-    }
-    return emoji_map.get(stage, '📌')
-
-
 def get_status_emoji(status):
     emoji_map = {
         'Developing': '🔄', 'Discussion': '💬', 'Evaluation': '📊',
@@ -515,64 +505,7 @@ def format_no_projects_notification(subs, start_date, end_date):
 
     return header
 
-
-async def safe_send_message(update_or_context, text: str, parse_mode: str = 'Markdown', reply_markup=None,
-                            chunk_size: int = 4096):
-    if hasattr(update_or_context, 'message'):
-        send_func = update_or_context.message.reply_text
-    elif hasattr(update_or_context, 'bot') and hasattr(update_or_context, 'effective_chat'):
-        send_func = lambda t, **kwargs: update_or_context.bot.send_message(
-            chat_id=update_or_context.effective_chat.id, text=t, **kwargs
-        )
-    elif hasattr(update_or_context, 'edit_message_text'):
-        return await split_long_message_for_query(update_or_context, text, parse_mode, reply_markup, chunk_size)
-    else:
-        send_func = update_or_context
-
-    if len(text) <= chunk_size:
-        try:
-            return await send_func(text, parse_mode=parse_mode, reply_markup=reply_markup)
-        except Exception as e:
-            logger.error(f"Error sending message: {e}")
-            return await send_func(text, reply_markup=reply_markup)
-
-    parts = []
-    current_part = ""
-    for line in text.split('\n'):
-        if len(current_part) + len(line) + 1 <= chunk_size:
-            if current_part:
-                current_part += '\n' + line
-            else:
-                current_part = line
-        else:
-            if current_part:
-                parts.append(current_part)
-            current_part = line
-    if current_part:
-        parts.append(current_part)
-
-    sent_messages = []
-    for i, part in enumerate(parts):
-        try:
-            if i == len(parts) - 1 and reply_markup:
-                msg = await send_func(part, parse_mode=parse_mode, reply_markup=reply_markup)
-            else:
-                msg = await send_func(part, parse_mode=parse_mode)
-            sent_messages.append(msg)
-            if i < len(parts) - 1:
-                await asyncio.sleep(0.5)
-        except RetryAfter as e:
-            logger.warning(f"Rate limited, waiting {e.retry_after} seconds")
-            await asyncio.sleep(e.retry_after)
-            msg = await send_func(part, parse_mode=parse_mode)
-            sent_messages.append(msg)
-        except Exception as e:
-            logger.error(f"Error sending message part {i}: {e}")
-
-    return sent_messages
-
-
-async def split_long_message_for_query(query, text: str, parse_mode: str = 'Markdown', reply_markup=None,
+async def split_long_message_for_query(query, text, parse_mode = 'Markdown', reply_markup=None,
                                        chunk_size: int = 4096):
     if len(text) <= chunk_size:
         try:
@@ -666,50 +599,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(welcome_text, parse_mode='Markdown', reply_markup=get_main_menu_keyboard())
 
 
-async def test_notifications(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔍 Проверяю проекты за вчера...")
-    yesterday = datetime.now() - timedelta(days=1)
-    projects = await fetch_with_retry_simple(api.fetch_all_projects, max_retries=2, delay=2, max_pages=50)
-    if not projects:
-        await update.message.reply_text("❌ Не удалось загрузить проекты")
-        return
-
-    yesterday_projects = []
-    for p in projects:
-        date_str = p.get('publicationDate') or p.get('creationDate', '')
-        if date_str:
-            try:
-                project_date = datetime.strptime(date_str[:10], '%Y-%m-%d').date()
-                if project_date == yesterday.date():
-                    topics = ProjectClassifier.classify_as_list(title=p.get('title'))
-                    if topics:
-                        p['classified_topics'] = topics
-                        yesterday_projects.append(p)
-            except:
-                continue
-
-    user_subs = get_user_subs_cached(update.effective_user.id)
-    if not user_subs:
-        await update.message.reply_text(
-            "❌ У вас нет подписок. Сначала подпишитесь на темы!",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔍 Перейти к подписке", callback_data="menu_search")
-            ]])
-        )
-        return
-
-    user_projects = []
-    for p in yesterday_projects:
-        if set(p.get('classified_topics', [])).intersection(set(user_subs)):
-            user_projects.append(p)
-
-    if user_projects:
-        message = format_projects_notification(user_projects, user_subs, yesterday)
-    else:
-        message = format_no_projects_notification(user_subs, yesterday)
-
-    await update.message.reply_text(message, parse_mode='Markdown')
-
 async def send_daily_notifications(application: Application):
     logger.info("🕐 Запуск ежедневной рассылки уведомлений")
 
@@ -789,7 +678,6 @@ async def send_daily_notifications(application: Application):
         if user_time != current_time_str:
             continue
 
-        # уникальный ключ отправки
         today_key = f"sent_{user_id}_{date_range_key}"
         if projects_cache.get(today_key):
             continue
@@ -803,7 +691,6 @@ async def send_daily_notifications(application: Application):
             if set(p['classified_topics']).intersection(set(user_subs)):
                 user_projects.append(p)
 
-        # формируем диапазон дат для заголовка
         start_date = min(dates_to_check)
         end_date = max(dates_to_check)
 
@@ -1269,7 +1156,7 @@ async def show_time_selection(query):
     current_time = db.get_notification_time(query.from_user.id)
 
     keyboard = []
-    times = ["06:00", "07:00", "08:00", "09:00", "10:00",
+    times = ["06:00", "07:00","08:15", "08:00", "09:00", "10:00",
              "12:00", "15:00", "18:00"]
 
     for t in times:
@@ -1537,7 +1424,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for topic in selected:
             db.subscribe(user_id, topic)
 
-        # Сбрасываем кеш после изменения подписок
         invalidate_user_subs_cache(user_id)
 
         context.user_data.pop('selected_topics', None)
@@ -1566,7 +1452,6 @@ def main():
     logger.info("⏰ Планировщик уведомлений запущен (проверка каждую минуту)")
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("test_notify", test_notifications))
     application.add_handler(CallbackQueryHandler(button_handler))
 
     logger.info("🚀 Бот запущен с поддержкой кеша и отображением этапов проектов!")
