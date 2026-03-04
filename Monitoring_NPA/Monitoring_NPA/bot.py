@@ -1311,6 +1311,30 @@ async def show_last_projects(query, context, period="7", scope="all"):
             InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
         ]])
     )
+
+
+async def warm_up_cache(application: Application):
+    logger.info("🔥 Прогрев кеша проектов")
+
+    cache_key = f"all_projects_{datetime.now().strftime('%Y%m%d')}"
+
+    if projects_cache.get(cache_key):
+        logger.info("Кеш уже прогрет")
+        return
+
+    projects = await fetch_with_retry_simple(
+        api.fetch_all_projects,
+        max_retries=3,
+        delay=2,
+        max_pages=500
+    )
+
+    if projects:
+        projects_cache.set(cache_key, projects)
+        logger.info(f"Кеш прогрет: {len(projects)} проектов")
+    else:
+        logger.error("Не удалось прогреть кеш")
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1436,9 +1460,16 @@ def main():
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         send_daily_notifications,
-        trigger=CronTrigger(minute="*"),
+        trigger=CronTrigger(hour="*"),
         args=[application],
         id='daily_notifications',
+        replace_existing=True
+    )
+    scheduler.add_job(
+        warm_up_cache,
+        trigger=CronTrigger(hour=8, minute=43),
+        args=[application],
+        id='cache_warmup',
         replace_existing=True
     )
 
