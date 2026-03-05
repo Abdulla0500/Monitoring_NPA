@@ -712,7 +712,11 @@ async def send_daily_notifications(application: Application):
             continue
 
         if project_date in dates_to_check:
-            topics = ProjectClassifier.classify_as_list(title=p.get('title', ''))
+            department = p.get('developedDepartment', {}).get('description')
+            topics = ProjectClassifier.classify_as_list(
+                title=p.get('title', ''),
+                department=department
+            )
             p['classified_topics'] = topics
             projects_for_period.append(p)
 
@@ -1080,7 +1084,7 @@ async def show_settings_menu(query):
             left = items[i]
             if i + 1 < len(items):
                 right = items[i + 1]
-                rows.append(f"{left:<30}{right:<20}")
+                rows.append(f"{left:<30}{right:>30}")
             else:
                 rows.append(f"{left:<30}")
 
@@ -1298,7 +1302,11 @@ async def show_last_projects(query, context, period="7", scope="all"):
         if project_date < start_date:
             continue
 
-        topics = ProjectClassifier.classify_as_list(title=p.get("title", ""))
+        department = p.get('developedDepartment', {}).get('description')
+        topics = ProjectClassifier.classify_as_list(
+            title=p.get("title", ""),
+            department=department
+        )
         if scope == "mine":
             if not topics:
                 continue
@@ -1375,8 +1383,10 @@ async def warm_up_archive_cache(application):
     )
     if projects:
         for p in projects:
+            department = p.get('developedDepartment', {}).get('description')
             p['classified_topics'] = ProjectClassifier.classify_as_list(
-                title=p.get('title', '')
+                title=p.get('title', ''),
+                department=department
             )
 
         projects_cache.set(cache_key, projects)
@@ -1403,8 +1413,10 @@ async def warm_up_cache(application):
     )
     if projects:
         for p in projects:
+            department = p.get('developedDepartment', {}).get('description')
             p['classified_topics'] = ProjectClassifier.classify_as_list(
-                title=p.get('title', '')
+                title=p.get('title', ''),
+                department=department
             )
 
         projects_cache.set(cache_key_projects, projects)
