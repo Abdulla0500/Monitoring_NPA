@@ -1414,6 +1414,7 @@ async def show_last_projects(query, context, period="7", scope="all"):
         ]])
     )
 
+
 async def warm_up_archive_cache(application):
     logger.info("🗂 Прогрев архивного кеша")
     cache_key = get_archive_cache_key()
@@ -1427,24 +1428,26 @@ async def warm_up_archive_cache(application):
         max_retries=3,
         delay=2
     )
+
     if projects:
         for p in projects:
-            department = p.get('developedDepartment', {}).get('description')
+            dept_dict = p.get('developedDepartment')
+            if dept_dict and isinstance(dept_dict, dict):
+                department = dept_dict.get('description')
+                p['department_name'] = department or 'Не указано'
+            else:
+                department = None
+                p['department_name'] = 'Не указано'
+
             p['classified_topics'] = ProjectClassifier.classify_as_list(
                 title=p.get('title', ''),
                 department=department
             )
-            dept = p.get('developedDepartment')
-            if dept and isinstance(dept, dict):
-                p['department_name'] = dept.get('description', 'Не указано')
-            else:
-                p['department_name'] = 'Не указано'
 
         projects_cache.set(cache_key, projects)
         logger.info(f"Архивный кеш прогрет: {len(projects)} проектов")
     else:
         logger.error("Ошибка прогрева архивного кеша")
-
 async def warm_up_cache(application):
     logger.info("🔥 Прогрев кеша проектов")
 
@@ -1647,7 +1650,7 @@ def main():
 
     scheduler.add_job(
         warm_up_archive_cache,
-        trigger=CronTrigger(hour=19 , minute=27),
+        trigger=CronTrigger(hour=19 , minute=59),
         args=[application],
         id='archive_cache_warmup',
         replace_existing=True
