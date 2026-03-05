@@ -1075,7 +1075,7 @@ async def show_settings_menu(query):
         for topic in subscriptions:
             full_name = TOPICS_SHORT.get(topic, topic)
             subs_list.append(full_name)
-        subs_text = "📋 **Текущие подписки:**\n" + "\n".join(subs_list) + f"\n\n📊 Всего: {len(subscriptions)} подписок\n"
+        subs_text = "📋 **Текущие подписки:**\n\n" + "\n\n".join(subs_list) + f"\n\n📊 Всего: {len(subscriptions)} подписок\n"
     else:
         subs_text = "❌ У вас нет активных подписок\n\n"
 
