@@ -1415,7 +1415,6 @@ async def show_last_projects(query, context, period="7", scope="all"):
 
 async def warm_up_archive_cache(application):
     logger.info("🗂 Прогрев архивного кеша")
-
     cache_key = get_archive_cache_key()
 
     if projects_cache.get(cache_key):
@@ -1649,7 +1648,7 @@ def main():
 
     scheduler.add_job(
         warm_up_archive_cache,
-        trigger=CronTrigger(hour=16 , minute=46),
+        trigger=CronTrigger(hour=16 , minute=54),
         args=[application],
         id='archive_cache_warmup',
         replace_existing=True
