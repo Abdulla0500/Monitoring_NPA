@@ -211,15 +211,6 @@ def safe_get_date_str(date_value):
         return date_value.strftime('%Y-%m-%d')
     return None
 
-def get_status_emoji(status):
-    emoji_map = {
-        'Developing': '🔄', 'Discussion': '💬', 'Evaluation': '📊',
-        'Conclusion': '📝', 'Approval': '✅', 'Signing': '✍️',
-        'Registered': '📋', 'Published': '📢', 'Cancelled': '❌'
-    }
-    return emoji_map.get(status, '⚡')
-
-
 def format_project_stage(project):
     stage = project.get('stage', '')
     status = project.get('status', '')
@@ -282,7 +273,7 @@ def format_project_analyst(project):
         f"📅 *Дата публикации:* {pub_date}\n\n"
         f"📌 *{title}*\n\n"
         f"🔗 {url}\n\n"
-        "━━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
     )
 
     return text
@@ -327,7 +318,7 @@ def format_project_lawyer(project):
         f"🔄 *Статус:* {status_ru}\n\n"
         f"📅 *Дата публикации:* {pub_date}\n\n"
         f"🔗 {url}\n\n"
-        "━━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
     )
 
     return text
@@ -367,7 +358,7 @@ def format_project_product(project):
         f"📂 {project_type}\n\n"
         f"⚖ {procedure}\n\n"
         f"🔗 {url}\n\n"
-        "━━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
     )
 
     return text
@@ -455,7 +446,7 @@ def format_projects_notification(projects, subs, start_date, end_date):
         )
 
     header += f"📊 Найдено проектов: *{len(projects)}*\n"
-    header += "━━━━━━━━━━━━━━━━━━━━\n\n"
+    header += "━━━━━━━━━━━━━━━━━━\n\n"
 
     text = header
 
@@ -464,14 +455,13 @@ def format_projects_notification(projects, subs, start_date, end_date):
         dept = p.get("developedDepartment", {}).get("description", "Не указано")
         date = p.get("publicationDate") or p.get("creationDate", "")
         project_id = p.get("id")
-        status_emoji = get_status_emoji(p.get("status", ""))
 
         topics = p.get("classified_topics", [])
         topic_str = " ".join([TOPICS_SHORT.get(t, t) for t in topics]) if topics else "НПА"
 
         url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
-        text += f"{i}. {status_emoji} {topic_str}\n\n"
+        text += f"{i}.{topic_str}\n\n"
         text += f"📌 *{title}*\n\n"
         text += f"🏢 {dept[:100]}\n\n"
 
@@ -554,13 +544,13 @@ async def send_projects_chunked(query, projects, user_role, title_prefix="📋 *
     text = f"{title_prefix}\n\n"
     text += f"📊 Найдено проектов: **{total_projects}**\n"
     text += f"📄 Показано {start_index + 1}-{end_index} из {total_projects}\n\n"
-    text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+    text += "━━━━━━━━━━━━━━━━━━\n\n"
 
     for i, p in enumerate(current_chunk, start=start_index + 1):
         status = p.get('status', '')
         status_emoji = get_status_emoji(status)
         project_text = format_project_by_role(p, user_role)
-        text += f"**{i}.** {status_emoji} {project_text}\n"
+        text += f"**{i}.** {project_text}\n"
 
     keyboard = []
 
@@ -592,7 +582,7 @@ async def send_archive_chunked(query, projects, topic, start_index=0, chunk_size
     text = f"🗂 **Архив {TOPICS_SHORT.get(topic, topic)} (все проекты)**\n\n"
     text += f"📊 Найдено проектов: **{total_projects}**\n"
     text += f"📄 Показано {start_index + 1}-{end_index} из {total_projects}\n\n"
-    text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+    text += "━━━━━━━━━━━━━━━━━━\n\n"
 
     for i, p in enumerate(current_chunk, start=start_index + 1):
         title = p.get('title', 'Без названия')
@@ -601,10 +591,9 @@ async def send_archive_chunked(query, projects, topic, start_index=0, chunk_size
         date_str = date[:10] if date else 'Дата не указана'
         project_id = p.get('id')
         stage_info = format_project_stage(p)
-        status_emoji = get_status_emoji(p.get('status', ''))
         url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
-        text += f"{i}. {status_emoji} **{TOPICS_SHORT.get(topic, topic)}**\n\n"
+        text += f"{i}. **{TOPICS_SHORT.get(topic, topic)}**\n\n"
         text += f"   📌 {title[:150]}...\n\n"
         text += f"   🏢 {dept[:100]}\n\n"
 
@@ -614,7 +603,7 @@ async def send_archive_chunked(query, projects, topic, start_index=0, chunk_size
 
         text += f"   📅 {date_str}\n\n"
         text += f"   🔗 {url}\n\n"
-        text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        text += "━━━━━━━━━━━━━━━━━━\n\n"
 
     keyboard = []
 
@@ -941,14 +930,14 @@ async def show_current_projects(query, context):
     else:
         text = f"📋 **Текущие проекты (активные)**\n\n"
         text += f"📊 По вашим подпискам: **{len(matching_projects)}** проектов в работе\n\n"
-        text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        text += "━━━━━━━━━━━━━━━━━━\n\n"
 
         for i, p in enumerate(matching_projects, 1):
             status = p.get('status', '')
-            status_emoji = get_status_emoji(status)
+
 
             project_text = format_project_by_role(p, user_role)
-            text += f"**{i}.** {status_emoji} {project_text}\n"
+            text += f"**{i}.** {project_text}\n"
     context.user_data['current_projects'] = matching_projects
     await send_projects_chunked(
         query=query,
@@ -1074,7 +1063,7 @@ async def show_archive_projects(query, context, topic):
 
     text = f"🗂 **Архив {TOPICS_SHORT.get(topic, topic)} (все проекты)**\n\n"
     text += f"📊 Найдено проектов: {len(filtered_projects)}\n\n"
-    text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+    text += "━━━━━━━━━━━━━━━━━━\n\n"
 
     count = 0
     for p in filtered_projects:
@@ -1085,10 +1074,9 @@ async def show_archive_projects(query, context, topic):
         date_str = date[:10] if date else 'Дата не указана'
         project_id = p.get('id')
         stage_info = format_project_stage(p)
-        status_emoji = get_status_emoji(p.get('status', ''))
         url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
-        text += f"{count}. {status_emoji} **{TOPICS_SHORT.get(topic, topic)}**\n\n"
+        text += f"{count}. **{TOPICS_SHORT.get(topic, topic)}**\n\n"
         text += f"   📌 {title[:150]}...\n\n"
         text += f"   🏢 {dept[:100]}\n\n"
 
@@ -1098,7 +1086,7 @@ async def show_archive_projects(query, context, topic):
 
         text += f"   📅 {date_str}\n\n"
         text += f"   🔗 {url}\n\n"
-        text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        text += "━━━━━━━━━━━━━━━━━━\n\n"
 
 
     keyboard = [
@@ -1131,9 +1119,9 @@ async def show_settings_menu(query):
             left = items[i]
             if i + 1 < len(items):
                 right = items[i + 1]
-                rows.append(f"{left:<30}{right:>30}")
+                rows.append(f"{left:<20}{right:<20}")
             else:
-                rows.append(f"{left:<30}")
+                rows.append(f"{left:<}"20)
 
         subs_text = "📋 **Текущие подписки:**\n\n" + "\n\n".join(rows) + f"\n\n📊 Всего: {len(subscriptions)} подписок\n"
     else:
@@ -1258,7 +1246,12 @@ async def show_time_selection(query):
     keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data="menu_settings")])
 
     await query.edit_message_text(
-        f"⏰ **Выберите время уведомлений**\n\nТекущее: {current_time} (UTC)",
+        f"⏰ **Выберите время уведомлений**\n\n"
+        f"🕐 Бот использует время **UTC (Всемирное координированное время)**\n\n"
+        f"💡 **Как перевести ваше местное время в UTC:**\n\n"
+        f"**Для России (MSK/московское время):**\n"
+        f"• Москва (UTC+3): вычитайте 3 часа\n\n"
+        f"  Пример: хотите в 10:00 MSK → выбирайте 07:00 UTC\n\n",
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -1383,7 +1376,8 @@ async def show_last_projects(query, context, period="7", scope="all"):
         f"📅 **Проекты {period_label}**\n\n"
         f"🔎 Фильтр: {scope_label}\n\n"
         f"📊 Найдено: **{len(matching_projects)}**\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+
     )
 
     for i, p in enumerate(matching_projects, 1):
@@ -1391,19 +1385,18 @@ async def show_last_projects(query, context, period="7", scope="all"):
         dept = p.get("developedDepartment", {}).get("description", "Не указано")
         date = p.get("publicationDate") or p.get("creationDate", "")
         project_id = p.get("id")
-        status_emoji = get_status_emoji(p.get("status", ""))
 
         topics = p.get("classified_topics", [])
         topic_str = " ".join([TOPICS_SHORT.get(t, t) for t in topics]) if topics else "НПА"
 
         url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
-        text += f"{i}. {status_emoji} {topic_str}\n\n"
+        text += f"{i}. {topic_str}\n\n"
         text += f"   📌 {title}\n\n"
         text += f"   🏢 {dept[:100]}\n\n"
         text += f"   📅 {date[:10] if date else 'Нет даты'}\n\n"
         text += f"   🔗 {url}\n\n"
-        text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+        text += "━━━━━━━━━━━━━━━━━━\n\n"
 
     await split_long_message_for_query(
         query,
@@ -1628,9 +1621,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 def main():
-    if TOKEN == "8218361501:AAFS9tTT2coSdo1Pk2mhWd7odDsjUq41jpQ":
-        print("⚠️  Внимание! Используется токен по умолчанию!")
-
     application = Application.builder().token(TOKEN).build()
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
@@ -1650,7 +1640,7 @@ def main():
 
     scheduler.add_job(
         warm_up_archive_cache,
-        trigger=CronTrigger(hour=20 , minute=41),
+        trigger=CronTrigger(hour=3 , minute=0),
         args=[application],
         id='archive_cache_warmup',
         replace_existing=True
@@ -1666,15 +1656,12 @@ def main():
     logger.info(f"📊 Настройки кеша:")
     logger.info(f"   • Проекты: макс={projects_cache.max_size}, TTL={projects_cache.ttl}с")
 
-
-
     try:
         application.run_polling(allowed_updates=Update.ALL_TYPES)
     finally:
         logger.info("🛑 Бот останавливается...")
         scheduler.shutdown()
         logger.info("👋 Планировщик остановлен")
-
 
 if __name__ == "__main__":
     main()
