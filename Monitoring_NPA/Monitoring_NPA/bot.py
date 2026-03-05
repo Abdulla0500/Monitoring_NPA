@@ -1028,7 +1028,7 @@ async def show_archive_topics(query):
 async def show_archive_projects(query, context, topic):
     await query.answer()
     await query.edit_message_text(f"🔍 Загружаю архив проектов по теме {TOPICS_SHORT.get(topic, topic)}...")
-
+    user_id = query.from_user.id
     all_projects_cache_key = get_archive_cache_key()
     all_projects = projects_cache.get(all_projects_cache_key)
 
@@ -1516,7 +1516,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 projects=filtered_projects,
                 topic=topic,
                 start_index=start_index,
-                chunk_size=10
+                chunk_size=50
             )
         else:
             await show_archive_projects(query, context, topic)
@@ -1650,7 +1650,7 @@ def main():
 
     scheduler.add_job(
         warm_up_archive_cache,
-        trigger=CronTrigger(hour=19 , minute=59),
+        trigger=CronTrigger(hour=20 , minute=41),
         args=[application],
         id='archive_cache_warmup',
         replace_existing=True
