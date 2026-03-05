@@ -1080,9 +1080,9 @@ async def show_settings_menu(query):
             left = items[i]
             if i + 1 < len(items):
                 right = items[i + 1]
-                rows.append(f"{left:<20}{right:<20}")
+                rows.append(f"{left:<30}{right:<30}")
             else:
-                rows.append(f"{left:<20}")
+                rows.append(f"{left:<30}")
 
         subs_text = "📋 **Текущие подписки:**\n\n" + "\n\n".join(rows) + f"\n\n📊 Всего: {len(subscriptions)} подписок\n"
     else:
