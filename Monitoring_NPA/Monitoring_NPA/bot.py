@@ -1071,15 +1071,20 @@ async def show_settings_menu(query):
     subscriptions = get_user_subs_cached(user_id)
 
     if subscriptions:
-        pairs = []
-        for i in range(0, len(subscriptions), 2):
-            pair = subscriptions[i:i + 2]
-            formatted_pair = []
-            for topic in pair:
-                formatted_pair.append(TOPICS_SHORT.get(topic, topic))
-            pairs.append("        ".join(formatted_pair))
+        sorted_subs = sorted(subscriptions)
 
-        subs_text = "📋 **Текущие подписки:**\n\n" + "\n\n".join(pairs) + f"\n\n📊 Всего: {len(subscriptions)} подписок\n"
+        items = [TOPICS_SHORT.get(topic, topic) for topic in sorted_subs]
+
+        rows = []
+        for i in range(0, len(items), 2):
+            left = items[i]
+            if i + 1 < len(items):
+                right = items[i + 1]
+                rows.append(f"`{left:<20}{right:<20}`")
+            else:
+                rows.append(f"`{left:<20}`")
+
+        subs_text = "📋 **Текущие подписки:**\n\n" + "\n\n".join(rows) + f"\n\n📊 Всего: {len(subscriptions)} подписок\n"
     else:
         subs_text = "❌ У вас нет активных подписок\n\n"
 
