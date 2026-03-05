@@ -1432,7 +1432,7 @@ async def warm_up_archive_cache(application):
             department = p.get('developedDepartment', {}).get('description')
             p['classified_topics'] = ProjectClassifier.classify_as_list(
                 title=p.get('title', ''),
-
+                department=department
             )
             dept = p.get('developedDepartment')
             if dept and isinstance(dept, dict):
@@ -1440,8 +1440,6 @@ async def warm_up_archive_cache(application):
             else:
                 p['department_name'] = 'Не указано'
 
-        projects_cache.set(cache_key, projects)
-    if projects:
         projects_cache.set(cache_key, projects)
         logger.info(f"Архивный кеш прогрет: {len(projects)} проектов")
     else:
@@ -1649,7 +1647,7 @@ def main():
 
     scheduler.add_job(
         warm_up_archive_cache,
-        trigger=CronTrigger(hour=18 , minute=58),
+        trigger=CronTrigger(hour=19 , minute=27),
         args=[application],
         id='archive_cache_warmup',
         replace_existing=True
