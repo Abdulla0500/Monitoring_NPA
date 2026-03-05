@@ -1088,7 +1088,7 @@ async def show_settings_menu(query):
     ]
 
     await query.edit_message_text(
-        f"⚙️ **Настройки**\n\nТекущая роль: {role_name}\nВыберите что хотите изменить:",
+        f"⚙️ **Настройки**\n\nТекущая роль: {role_name}\n\n{subs_text}\n\nВыберите что хотите изменить:",
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
