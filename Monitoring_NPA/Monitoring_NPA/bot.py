@@ -545,50 +545,34 @@ async def split_long_message_for_query(query, text, parse_mode = 'Markdown', rep
 
     return None
 
-
-async def send_projects_chunked(query, projects, user_role, start_index=0, chunk_size=50):
-    """
-    Отправляет проекты чанками по 50 штук с кнопкой "Продолжить"
-
-    Args:
-        query: callback query
-        projects: список проектов
-        user_role: роль пользователя
-        start_index: с какого индекса начинать
-        chunk_size: сколько проектов показывать за раз
-    """
+async def send_projects_chunked(query, projects, user_role, title_prefix="📋 **Текущие проекты**", start_index=0, chunk_size=10, additional_data=None):
     total_projects = len(projects)
     end_index = min(start_index + chunk_size, total_projects)
 
-    # Берем текущий кусок проектов
     current_chunk = projects[start_index:end_index]
-
-    # Формируем заголовок
-    text = f"📋 **Текущие проекты (активные)**\n\n"
-    text += f"📊 По вашим подпискам: **{total_projects}** проектов в работе\n"
+    text = f"{title_prefix}\n\n"
+    text += f"📊 Найдено проектов: **{total_projects}**\n"
     text += f"📄 Показано {start_index + 1}-{end_index} из {total_projects}\n\n"
     text += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
-    # Добавляем проекты текущего куска
     for i, p in enumerate(current_chunk, start=start_index + 1):
         status = p.get('status', '')
         status_emoji = get_status_emoji(status)
         project_text = format_project_by_role(p, user_role)
         text += f"**{i}.** {status_emoji} {project_text}\n"
 
-    # Создаем клавиатуру
     keyboard = []
 
-    # Если есть еще проекты, добавляем кнопку "Продолжить"
     if end_index < total_projects:
+        callback_data = f"continue_{start_index + chunk_size}"
+        if additional_data:
+            callback_data += f"_{additional_data}"
         keyboard.append([
             InlineKeyboardButton(
                 f"▶️ Продолжить ({end_index + 1}-{min(end_index + chunk_size, total_projects)} из {total_projects})",
-                callback_data=f"continue_{start_index + chunk_size}"
+                callback_data=callback_data
             )
         ])
-
-    # Кнопка возврата в меню
     keyboard.append([InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")])
 
     await split_long_message_for_query(
@@ -597,7 +581,62 @@ async def send_projects_chunked(query, projects, user_role, start_index=0, chunk
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-    
+
+async def send_archive_chunked(query, projects, topic, start_index=0, chunk_size=50):
+    total_projects = len(projects)
+    end_index = min(start_index + chunk_size, total_projects)
+
+    current_chunk = projects[start_index:end_index]
+
+    text = f"🗂 **Архив {TOPICS_SHORT.get(topic, topic)} (все проекты)**\n\n"
+    text += f"📊 Найдено проектов: **{total_projects}**\n"
+    text += f"📄 Показано {start_index + 1}-{end_index} из {total_projects}\n\n"
+    text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+
+    for i, p in enumerate(current_chunk, start=start_index + 1):
+        title = p.get('title', 'Без названия')
+        dept = p.get('developedDepartment', {}).get('description', 'Не указано')
+        date = p.get('publicationDate') or p.get('creationDate', '')
+        date_str = date[:10] if date else 'Дата не указана'
+        project_id = p.get('id')
+        stage_info = format_project_stage(p)
+        status_emoji = get_status_emoji(p.get('status', ''))
+        url = f"https://regulation.gov.ru/projects#npa={project_id}"
+
+        text += f"{i}. {status_emoji} **{TOPICS_SHORT.get(topic, topic)}**\n\n"
+        text += f"   📌 {title[:150]}...\n\n"
+        text += f"   🏢 {dept[:100]}\n\n"
+
+        if stage_info:
+            for line in stage_info.split('\n'):
+                text += f"   {line}\n"
+
+        text += f"   📅 {date_str}\n\n"
+        text += f"   🔗 {url}\n\n"
+        text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+
+    keyboard = []
+
+    if end_index < total_projects:
+        keyboard.append([
+            InlineKeyboardButton(
+                f"▶️ Продолжить ({end_index + 1}-{min(end_index + chunk_size, total_projects)} из {total_projects})",
+                callback_data=f"continue_archive_{topic}_{start_index + chunk_size}"
+            )
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton("◀️ Назад к темам", callback_data="menu_archive"),
+        InlineKeyboardButton("◀️ В главное меню", callback_data="back_to_main")
+    ])
+
+    await split_long_message_for_query(
+        query,
+        text,
+        parse_mode='Markdown',
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
 async def fetch_with_retry_simple(fetch_func, max_retries=3, delay=2, *args, **kwargs):
     func_with_args = partial(fetch_func, *args, **kwargs)
     for attempt in range(1, max_retries + 1):
@@ -909,14 +948,14 @@ async def show_current_projects(query, context):
 
             project_text = format_project_by_role(p, user_role)
             text += f"**{i}.** {status_emoji} {project_text}\n"
-
-    await split_long_message_for_query(
-        query,
-        text,
-        parse_mode='Markdown',
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
-        ]])
+    context.user_data['current_projects'] = matching_projects
+    await send_projects_chunked(
+        query=query,
+        projects=matching_projects,
+        user_role=user_role,
+        title_prefix="📋 **Текущие проекты (активные)**\n\n📊 По вашим подпискам",
+        start_index=0,
+        chunk_size=50
     )
 
 async def show_search_menu(query, context):
@@ -1065,8 +1104,15 @@ async def show_archive_projects(query, context, topic):
         [InlineKeyboardButton("◀️ Назад к темам", callback_data="menu_archive")],
         [InlineKeyboardButton("◀️ В главное меню", callback_data="back_to_main")]
     ]
-
-    await split_long_message_for_query(query, text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
+    archive_key = f"archive_{topic}_{user_id}"
+    context.user_data[archive_key] = filtered_projects
+    await send_archive_chunked(
+        query=query,
+        projects=filtered_projects,
+        topic=topic,
+        start_index=0,
+        chunk_size=50
+    )
 
 async def show_settings_menu(query):
     user_id = query.from_user.id
@@ -1434,7 +1480,41 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     logger.info(f"Пользователь {user_id} нажал кнопку: {data}")
 
-    if data == "menu_current":
+    if data.startswith('continue_') and not data.startswith('continue_archive_'):
+        parts = data.split('_')
+        start_index = int(parts[1])
+
+        matching_projects = context.user_data.get('current_projects', [])
+        if matching_projects:
+            user_role = db.get_user_role(user_id)
+
+            await send_projects_chunked(
+                query=query,
+                projects=matching_projects,
+                user_role=user_role,
+                title_prefix="📋 **Текущие проекты (активные)**\n\n📊 По вашим подпискам",
+                start_index=start_index,
+                chunk_size=50
+            )
+    elif data.startswith('continue_archive_'):
+        parts = data.split('_')
+        topic = parts[2]
+        start_index = int(parts[3])
+
+        archive_key = f"archive_{topic}_{user_id}"
+        filtered_projects = context.user_data.get(archive_key, [])
+
+        if filtered_projects:
+            await send_archive_chunked(
+                query=query,
+                projects=filtered_projects,
+                topic=topic,
+                start_index=start_index,
+                chunk_size=10
+            )
+        else:
+            await show_archive_projects(query, context, topic)
+    elif data == "menu_current":
         await show_current_projects(query, context)
     elif data.startswith('select_role_'):
         role_id = data.replace('select_role_', '')
@@ -1564,7 +1644,7 @@ def main():
 
     scheduler.add_job(
         warm_up_archive_cache,
-        trigger=CronTrigger(hour=3 , minute=0),
+        trigger=CronTrigger(hour=14 , minute=28),
         args=[application],
         id='archive_cache_warmup',
         replace_existing=True
