@@ -128,7 +128,6 @@ def get_main_menu_keyboard():
     keyboard = [
         [InlineKeyboardButton("📋 Текущие проекты", callback_data="menu_current")],
         [InlineKeyboardButton("🔍 Поиск по темам", callback_data="menu_search")],
-        [InlineKeyboardButton("📌 Мои подписки", callback_data="menu_subs")],
         [InlineKeyboardButton("🗂 Архив", callback_data="menu_archive")],
         [InlineKeyboardButton("⚙️ Настройки", callback_data="menu_settings")],
         [InlineKeyboardButton("❓ Помощь", callback_data="menu_help")],
@@ -393,7 +392,7 @@ def format_weekly_digest(projects: List, start_date, end_date):
         text = f"📊 **СВОДКА ЗА ПЕРИОД ({start_str}–{end_str})**\n\n"
 
     text = f"📊 **ЕЖЕНЕДЕЛЬНЫЙ ДАЙДЖЕСТ НПА ({start_str}–{end_str})**\n\n"
-    text += f"📈 Всего новых проектов: {len(projects)}\n"
+    text += f"📈 Всего новых проектов по нашим темам: {len(projects)}\n\n"
 
     by_topic = {}
     for p in projects:
@@ -405,7 +404,7 @@ def format_weekly_digest(projects: List, start_date, end_date):
                 by_topic[topic] = []
             by_topic[topic].append(p)
 
-    text += f"   • По нашим темам: {sum(len(v) for v in by_topic.values())}\n\n"
+
 
     for topic, projs in by_topic.items():
         topic_name = TOPICS_SHORT.get(topic, topic)
@@ -961,36 +960,7 @@ async def show_search_menu(query, context):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def show_my_subscriptions(query, user_id):
-    subscriptions = get_user_subs_cached(user_id)
 
-    if not subscriptions:
-        await query.edit_message_text(
-            "❌ У вас нет активных подписок.\n\n"
-            "Вы можете выбрать интересующие темы в разделе управления.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⚙️ Управлять подписками", callback_data="menu_search")],
-                [InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")]
-            ])
-        )
-        return
-
-    text = "📌 **Ваши подписки:**\n\n"
-
-    for topic in subscriptions:
-        full_name = TOPICS.get(topic, topic)
-        text += f"• {full_name}\n\n"
-
-    keyboard = [
-        [InlineKeyboardButton("⚙️ Управлять подписками", callback_data="menu_search")],
-        [InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")]
-    ]
-
-    await query.edit_message_text(
-        text,
-        parse_mode='Markdown',
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
 async def show_archive_topics(query):
     keyboard = []
     row = []
@@ -1098,11 +1068,21 @@ async def show_settings_menu(query):
     user_id = query.from_user.id
     current_role = db.get_user_role(user_id)
     role_name = USER_ROLES.get(current_role, {}).get('name', 'Не выбрана')
+    subscriptions = get_user_subs_cached(user_id)
 
+    if subscriptions:
+        subs_list = []
+        for topic in subscriptions:
+            full_name = TOPICS_SHORT.get(topic, topic)
+            subs_list.append(full_name)
+        subs_text = "📋 **Текущие подписки:**\n" + "\n".join(subs_list) + f"\n\n📊 Всего: {len(subscriptions)} подписок\n"
+    else:
+        subs_text = "❌ У вас нет активных подписок\n\n"
 
 
     keyboard = [
         [InlineKeyboardButton(f"👤 Сменить роль (сейчас: {role_name})", callback_data="change_role")],
+        [InlineKeyboardButton("🔧 Управление подписками", callback_data="menu_search")],
         [InlineKeyboardButton("⏰ Время уведомлений", callback_data="settings_time")],
         [InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")]
     ]
@@ -1442,8 +1422,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_role_selection(query)
     elif data == "menu_search":
         await show_search_menu(query, context)
-    elif data == "menu_subs":
-        await show_my_subscriptions(query, user_id)
     elif data == "menu_archive":
         await show_archive_topics(query)
     elif data == "menu_settings":
