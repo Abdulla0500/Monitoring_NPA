@@ -45,6 +45,7 @@ class Database:
         username TEXT,
         department TEXT,
         role TEXT DEFAULT 'analyst',
+        notification_time TEXT DEFAULT '06:00',
         registered_at TIMESTAMP)''')
 
         self.cursor.execute('''
@@ -80,10 +81,10 @@ class Database:
         print("Таблицы успешно созданы (или уже существовали)")
 
 
-    def add_user(self, telegram_id, first_name, last_name, username, role='analyst'):
+    def add_user(self, telegram_id, first_name, last_name, username, role='analyst', ):
         self.cursor.execute('''
             INSERT OR IGNORE INTO users 
-            (telegram_id, first_name, last_name, username, role, registered_at)
+            (telegram_id, first_name, last_name, username, role,notification_time, registered_at)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (
             telegram_id,
@@ -91,6 +92,7 @@ class Database:
             last_name,
             username,
             role,
+            '06:00',
             datetime.now().isoformat()
         ))
         self.conn.commit()
