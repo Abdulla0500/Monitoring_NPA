@@ -1071,11 +1071,15 @@ async def show_settings_menu(query):
     subscriptions = get_user_subs_cached(user_id)
 
     if subscriptions:
-        subs_list = []
-        for topic in subscriptions:
-            full_name = TOPICS_SHORT.get(topic, topic)
-            subs_list.append(full_name)
-        subs_text = "📋 **Текущие подписки:**\n\n" + "\n\n".join(subs_list) + f"\n\n📊 Всего: {len(subscriptions)} подписок\n"
+        pairs = []
+        for i in range(0, len(subscriptions), 2):
+            pair = subscriptions[i:i + 2]
+            formatted_pair = []
+            for topic in pair:
+                formatted_pair.append(TOPICS_SHORT.get(topic, topic))
+            pairs.append("   ".join(formatted_pair))
+
+        subs_text = "📋 **Текущие подписки:**\n\n" + "\n".join(pairs) + f"\n\n📊 Всего: {len(subscriptions)} подписок\n"
     else:
         subs_text = "❌ У вас нет активных подписок\n\n"
 
