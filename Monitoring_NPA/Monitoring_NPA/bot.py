@@ -1080,7 +1080,7 @@ async def show_settings_menu(query):
             left = items[i]
             if i + 1 < len(items):
                 right = items[i + 1]
-                rows.append(f"{left:<30}{right:<30}")
+                rows.append(f"{left:<30}{right:<20}")
             else:
                 rows.append(f"{left:<30}")
 
