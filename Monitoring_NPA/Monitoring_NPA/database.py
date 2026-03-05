@@ -81,11 +81,11 @@ class Database:
         print("Таблицы успешно созданы (или уже существовали)")
 
 
-    def add_user(self, telegram_id, first_name, last_name, username, role='analyst', ):
+    def add_user(self, telegram_id, first_name, last_name, username, role='analyst'):
         self.cursor.execute('''
             INSERT OR IGNORE INTO users 
             (telegram_id, first_name, last_name, username, role,notification_time, registered_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (
             telegram_id,
             first_name,
