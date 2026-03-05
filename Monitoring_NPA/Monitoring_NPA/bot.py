@@ -1077,9 +1077,9 @@ async def show_settings_menu(query):
             formatted_pair = []
             for topic in pair:
                 formatted_pair.append(TOPICS_SHORT.get(topic, topic))
-            pairs.append("   ".join(formatted_pair))
+            pairs.append("        ".join(formatted_pair))
 
-        subs_text = "📋 **Текущие подписки:**\n\n" + "\n".join(pairs) + f"\n\n📊 Всего: {len(subscriptions)} подписок\n"
+        subs_text = "📋 **Текущие подписки:**\n\n" + "\n\n".join(pairs) + f"\n\n📊 Всего: {len(subscriptions)} подписок\n"
     else:
         subs_text = "❌ У вас нет активных подписок\n\n"
 
