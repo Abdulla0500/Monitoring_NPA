@@ -1873,7 +1873,7 @@ def main():
     )
     scheduler.add_job(
         warm_up_cache,
-        trigger=CronTrigger(minute="38"),
+        trigger=CronTrigger(minute="36"),
         args=[application],
         id='cache_warmup',
         replace_existing=True
@@ -1889,7 +1889,7 @@ def main():
 
     scheduler.add_job(
         warm_up_last_modified_scheduler,
-        trigger=CronTrigger(minute="42"),  # каждые 30 минут
+        trigger=CronTrigger(minute="39"),  # каждые 30 минут
         args=[application],
         id='last_modified_warmup',
         replace_existing=True
