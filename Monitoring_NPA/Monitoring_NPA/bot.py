@@ -1,4 +1,4 @@
-#бан
+
 import logging
 import asyncio
 import time
