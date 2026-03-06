@@ -860,14 +860,13 @@ async def send_daily_notifications(application: Application):
 
     logger.info(f"Рассылка завершена. Отправлено: {sent_count}")
 
-
 async def show_current_projects(query, context):
     await query.edit_message_text("🔍 Загружаю текущие проекты по вашим подпискам...")
 
     user_id = query.from_user.id
     user_role = db.get_user_role(user_id)
     user_subs = get_user_subs_cached(user_id)
-    logger.info(f"Loaded subscriptions for user {user_id}")
+    logger.info(f"Загружены подписки для пользователя {user_id}: {user_subs}")
 
     if not user_subs:
         await query.edit_message_text(
@@ -880,23 +879,17 @@ async def show_current_projects(query, context):
         )
         return
 
+    # Получаем проекты из кеша (уже отсортированные!)
     cache_key_projects = get_hourly_cache_key()
-    projects = projects_cache.get(cache_key_projects)
+    all_projects = projects_cache.get(cache_key_projects)
 
-    if projects is None:
-        projects = await fetch_with_retry_simple(api.fetch_all_projects, max_retries=3, delay=2, max_pages=500)
-        if projects:
-            # Классифицируем проекты по темам
-            for p in projects:
-                department = p.get('developedDepartment', {}).get('description')
-                p['classified_topics'] = ProjectClassifier.classify_as_list(
-                    title=p.get('title', ''),
-                    department=department
-                )
-            projects_cache.set(cache_key_projects, projects)
-            logger.info(f"Cached {len(projects)} projects")
+    if all_projects is None:
+        # Если кеша нет, загружаем через warm_up_cache
+        logger.info("Кеш пуст, загружаем проекты...")
+        await warm_up_cache(context.application)
+        all_projects = projects_cache.get(cache_key_projects)
 
-    if not projects:
+    if not all_projects:
         await query.edit_message_text(
             "❌ Не удалось загрузить проекты.\nПопробуйте позже.",
             reply_markup=InlineKeyboardMarkup([[
@@ -933,119 +926,70 @@ async def show_current_projects(query, context):
         'Completed': '✔️ Завершен'
     }
 
-    # Сначала фильтруем по подпискам
+    # Фильтруем по подпискам и активности
     matching_projects = []
-    projects_to_enrich = []  # Для ВСЕХ ролей будем собирать проекты
-
-    for p in projects:
-        topics = p.get('classified_topics', [])
-        project_topics = set(topics) if topics else set()
-        user_topics_set = set(user_subs)
-
-        if not project_topics.intersection(user_topics_set):
-            continue
-
-        p['classified_topics'] = topics
-        matching_projects.append(p)
-
-        # Собираем ВСЕ проекты для обогащения (теперь для всех ролей)
-        projects_to_enrich.append(p)
-
-    if not matching_projects:
-        await query.edit_message_text(
-            "❌ Нет проектов по вашим подпискам.\n\n"
-            "Попробуйте посмотреть архив или изменить подписки.",
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🗂 Перейти в архив", callback_data="menu_archive")],
-                [InlineKeyboardButton("🔍 Изменить подписки", callback_data="menu_search")],
-                [InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")]
-            ])
-        )
-        return
-
-    # Обогащаем проекты датами последних изменений для ВСЕХ ролей
-    await query.edit_message_text("🔍 Загружаю детальную информацию по этапам проектов...")
-
-    enriched_count = 0
-    for p in projects_to_enrich:
-        project_id = p.get('id')
-        if project_id:
-            # Сначала проверяем кеш
-            cache_key = f"last_mod_{project_id}"
-            last_modified = last_modified_cache.get(cache_key)
-
-            # Если нет в кеше, запрашиваем из API
-            if not last_modified:
-                last_modified = await get_project_last_modified(project_id)
-
-            if last_modified:
-                p['last_modified'] = last_modified
-                enriched_count += 1
-            await asyncio.sleep(0.3)  # Небольшая задержка, чтобы не нагружать API
-
-    logger.info(f"Обогащено {enriched_count} проектов датами изменений")
-
-    # ФИЛЬТРАЦИЯ ПО АКТИВНОСТИ (комбинированный подход)
-    active_projects = []
     today = datetime.now().date()
 
-    for p in matching_projects:
+    for p in all_projects:
+        # Проверяем подписки
+        topics = p.get('classified_topics', [])
+        if not set(topics).intersection(set(user_subs)):
+            continue
+
+        # Проверяем активность
         is_active = False
         status = p.get('status', '')
 
-        # 1. Проверяем по дате последнего изменения (самый надежный признак)
+        # 1. По дате последнего изменения
         if p.get('last_modified'):
             try:
                 last_mod = datetime.strptime(p['last_modified'], '%Y-%m-%d').date()
                 days_since_change = (today - last_mod).days
-                if days_since_change <= 90:  # Активен, если менялся за последние 90 дней
+                if days_since_change <= 90:
                     is_active = True
             except (ValueError, TypeError):
                 pass
 
-        # 2. Если нет даты изменения или она старая, проверяем статус
+        # 2. По статусу
         if not is_active:
             if status in active_statuses:
                 is_active = True
-            elif not status:  # Пустой статус считаем активным
+            elif not status:
                 is_active = True
-            elif status not in completed_statuses:  # Неизвестный статус считаем активным
+            elif status not in completed_statuses:
                 is_active = True
 
-        # 3. Дополнительно проверяем по дате окончания обсуждения
+        # 3. По дате окончания обсуждения
         if not is_active:
             end_date_str = p.get('endPublicDiscussion')
             if end_date_str:
                 try:
                     end_date = datetime.strptime(end_date_str[:10], '%Y-%m-%d').date()
                     days_since_end = (today - end_date).days
-                    # Если обсуждение закончилось недавно (до 30 дней назад)
                     if days_since_end <= 30:
                         is_active = True
                 except (ValueError, TypeError):
                     pass
 
-        # 4. Явно завершенные проекты не показываем, если они не менялись недавно
+        # 4. Проверка завершенных проектов
         if status in completed_statuses:
             if p.get('last_modified'):
                 try:
                     last_mod = datetime.strptime(p['last_modified'], '%Y-%m-%d').date()
                     days_since_change = (today - last_mod).days
-                    if days_since_change <= 30:  # Если менялись за последние 30 дней
+                    if days_since_change <= 30:
                         is_active = True
                     else:
                         is_active = False
                 except (ValueError, TypeError):
                     is_active = False
             else:
-                # Если нет даты изменения, завершенные проекты не показываем
                 is_active = False
 
         if is_active:
-            active_projects.append(p)
+            matching_projects.append(p)
 
-    if not active_projects:
+    if not matching_projects:
         await query.edit_message_text(
             "❌ Нет активных проектов по вашим подпискам.\n\n"
             "Попробуйте посмотреть архив или изменить подписки.",
@@ -1058,27 +1002,14 @@ async def show_current_projects(query, context):
         )
         return
 
-    # СОРТИРУЕМ ПО ДАТЕ ПОСЛЕДНЕГО ИЗМЕНЕНИЯ для ВСЕХ ролей
-    def get_sort_date(proj):
-        # Приоритет 1: дата последнего изменения (если есть)
-        if proj.get('last_modified'):
-            return proj['last_modified']
-        # Приоритет 2: дата публикации
-        pub = proj.get('publicationDate') or proj.get('creationDate', '')
-        return pub[:10] if pub else '0000-00-00'
+    # Проекты УЖЕ ОТСОРТИРОВАНЫ из кеша, дополнительная сортировка не нужна!
+    context.user_data['current_projects'] = matching_projects
 
-    active_projects.sort(
-        key=get_sort_date,
-        reverse=True  # Сначала новые
-    )
-
-    context.user_data['current_projects'] = active_projects
-
-    title = f"📋 **Текущие активные проекты**\n📊 Сортировка по дате последнего изменения\n📅 Всего: {len(active_projects)}\n\n"
+    title = f"📋 **Текущие активные проекты**\n📊 Всего: {len(matching_projects)}\n\n"
 
     await send_projects_chunked(
         query=query,
-        projects=active_projects,
+        projects=matching_projects,
         user_role=user_role,
         title_prefix=title,
         start_index=0,
@@ -1648,6 +1579,7 @@ async def warm_up_cache(application):
         max_pages=500
     )
     if projects:
+        enriched_projects = []
         for p in projects:
             department = p.get('developedDepartment', {}).get('description')
             p['classified_topics'] = ProjectClassifier.classify_as_list(
@@ -1656,18 +1588,38 @@ async def warm_up_cache(application):
             )
             project_id = p.get('id')
             if project_id:
-                # Проверяем статус - для активных проектов загружаем даты
                 status = p.get('status', '')
-                active_statuses = ['Developing', 'Discussion', 'Evaluation', 'Conclusion', 'Approval']
-                if status in active_statuses:
-                    # Асинхронно загружаем в фоне
-                    asyncio.create_task(get_project_last_modified(project_id))
+                active_statuses = ['Developing', 'Discussion', 'Evaluation', 'Conclusion', 'Approval',
+                                   'Undefined', 'Signing', 'StartDiscussion', 'OnApprove', 'Draft',
+                                   'Text', 'PreDiscussion', 'Procedure']
 
-        projects_cache.set(cache_key_projects, projects)
-        logger.info(f"Кеш прогрет: {len(projects)} проектов")
+                if project_id and status in active_statuses:
+                    last_modified = asyncio.run_coroutine_threadsafe(
+                        get_project_last_modified(project_id),
+                        asyncio.get_event_loop()
+                    ).result(timeout=5)
+                    if last_modified:
+                        p['last_modified'] = last_modified
 
-    else:
-        logger.error("Не удалось прогреть кеш")
+                enriched_projects.append(p)
+
+            def get_sort_date(proj):
+                if proj.get('last_modified'):
+                    return proj['last_modified']
+                pub = proj.get('publicationDate') or proj.get('creationDate', '')
+                return pub[:10] if pub else '0000-00-00'
+
+            enriched_projects.sort(
+                key=get_sort_date,
+                reverse=True
+            )
+
+            projects_cache.set(cache_key_projects, enriched_projects)
+            logger.info(f"Кеш прогрет: {len(enriched_projects)} проектов (отсортированы)")
+
+        else:
+            logger.error("Не удалось прогреть кеш")
+
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1830,7 +1782,7 @@ def main():
     )
     scheduler.add_job(
         warm_up_cache,
-        trigger=CronTrigger(minute="0"),
+        trigger=CronTrigger(minute="14"),
         args=[application],
         id='cache_warmup',
         replace_existing=True
