@@ -1,12 +1,8 @@
-# 1. Начал работать — проверь статус
+
 git status
 
-# 2. Пора заканчивать — сохрани изменения
 git add .
-git commit -m "Что сделал сегодня"
+git commit -m "бум"
 git push
 
-обновлять код
-cd /opt/bots/Monitoring_NPA
-git pull
 systemctl restart telegram-bot
