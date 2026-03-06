@@ -182,7 +182,7 @@ class Cache:
 
 projects_cache = Cache(max_size=1000, ttl=90000)
 user_subs_cache = Cache(max_size=1000, ttl=36000)
-
+last_modified_cache = Cache(max_size=500, ttl=86400)
 
 def get_user_subs_cached(user_id):
     cache_key = f"subs_{user_id}"
@@ -211,6 +211,53 @@ def safe_get_date_str(date_value):
         return date_value.strftime('%Y-%m-%d')
     return None
 
+
+async def get_project_last_modified(project_id: str) -> Optional[str]:
+    """
+    Получает дату последнего изменения проекта из его этапов.
+    Возвращает дату в формате YYYY-MM-DD или None.
+    """
+    # Проверяем кеш
+    cache_key = f"last_mod_{project_id}"
+    cached_date = last_modified_cache.get(cache_key)
+    if cached_date:
+        logger.info(f"📦 Дата изменения для проекта {project_id} взята из кеша")
+        return cached_date
+
+    try:
+        # Используем уже существующий api объект
+        stages = await fetch_with_retry_simple(
+            api.fetch_project_stages,
+            max_retries=2,
+            delay=1,
+            project_id=project_id
+        )
+
+        if not stages:
+            return None
+
+        last_date = None
+        for stage in stages:
+            # Проверяем даты во всех возможных местах
+            if stage.get('file') and stage['file'].get('date'):
+                date_str = stage['file']['date'][:10]
+                if not last_date or date_str > last_date:
+                    last_date = date_str
+
+            if stage.get('modifiedFile') and stage['modifiedFile'].get('date'):
+                date_str = stage['modifiedFile']['date'][:10]
+                if not last_date or date_str > last_date:
+                    last_date = date_str
+
+        if last_date:
+            # Сохраняем в кеш
+            last_modified_cache.set(cache_key, last_date)
+            logger.info(f"💾 Дата изменения {last_date} для проекта {project_id} сохранена в кеш")
+
+        return last_date
+    except Exception as e:
+        logger.error(f"Ошибка получения даты изменения для проекта {project_id}: {e}")
+        return None
 def format_project_stage(project):
     stage = project.get('stage', '')
     status = project.get('status', '')
@@ -251,7 +298,8 @@ def format_project_analyst(project):
     pub_date = project.get("publicationDate") or project.get("creationDate")
     project_id = project.get("id")
     topics = project.get("classified_topics", [])
-
+    last_modified = project.get("last_modified")
+    last_modified_str = f"\n\n📅 *Последнее изменение:* {last_modified}" if last_modified else ""
     if topics:
         topic_labels = [TOPICS_SHORT.get(t, t) for t in topics]
         topic_str = "| ".join(topic_labels)
@@ -270,7 +318,7 @@ def format_project_analyst(project):
         f"⚖ {procedure}\n\n"
         f"📍 *Стадия:* {stage_ru}\n"
         f"🔄 *Статус:* {status_ru}\n"
-        f"📅 *Дата публикации:* {pub_date}\n\n"
+        f"📅 *Дата публикации:* {pub_date}{last_modified_str}\n\n"
         f"📌 *{title}*\n\n"
         f"🔗 {url}\n\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
@@ -295,6 +343,10 @@ def format_project_lawyer(project):
     project_id = project.get("id")
     topics = project.get("classified_topics", [])
 
+    # Получаем дату последнего изменения из этапов (если есть)
+    last_modified = project.get("last_modified")
+    last_modified_str = f"\n\n📅 *Последнее изменение:* {last_modified}" if last_modified else ""
+
     if topics:
         topic_labels = [TOPICS.get(t, t) for t in topics]
         topic_str = ", ".join(topic_labels)
@@ -316,7 +368,7 @@ def format_project_lawyer(project):
         f"⚖ *Процедура:* {procedure}\n\n"
         f"📍 *Стадия:* {stage_ru}\n\n"
         f"🔄 *Статус:* {status_ru}\n\n"
-        f"📅 *Дата публикации:* {pub_date}\n\n"
+        f"📅 *Дата публикации:* {pub_date}{last_modified_str}\n\n"
         f"🔗 {url}\n\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
     )
@@ -336,6 +388,8 @@ def format_project_product(project):
     project_id = project.get("id")
     topics = project.get("classified_topics", [])
     pub_date = project.get("publicationDate") or project.get("creationDate")
+    last_modified = project.get("last_modified")
+    last_modified_str = f"\n\n📅 *Последнее изменение:* {last_modified}" if last_modified else ""
     if topics:
         topic_labels = [TOPICS_SHORT.get(t, t) for t in topics]
         topic_str = " | ".join(topic_labels)
@@ -353,7 +407,7 @@ def format_project_product(project):
 
     text = (
         f"🧭 **{topic_str}**\n\n"
-        f"🏢 *{department}* | {status_ru} | {pub_date}\n\n"
+        f"🏢 *{department}* | {status_ru} | {pub_date}|{last_modified_str}\n\n"
         f"📌 *{short_title}*\n\n"
         f"📂 {project_type}\n\n"
         f"⚖ {procedure}\n\n"
@@ -805,6 +859,8 @@ async def send_daily_notifications(application: Application):
             logger.error(f"Ошибка отправки пользователю {user_id}: {e}")
 
     logger.info(f"Рассылка завершена. Отправлено: {sent_count}")
+
+
 async def show_current_projects(query, context):
     await query.edit_message_text("🔍 Загружаю текущие проекты по вашим подпискам...")
 
@@ -830,6 +886,13 @@ async def show_current_projects(query, context):
     if projects is None:
         projects = await fetch_with_retry_simple(api.fetch_all_projects, max_retries=3, delay=2, max_pages=500)
         if projects:
+            # Классифицируем проекты по темам
+            for p in projects:
+                department = p.get('developedDepartment', {}).get('description')
+                p['classified_topics'] = ProjectClassifier.classify_as_list(
+                    title=p.get('title', ''),
+                    department=department
+                )
             projects_cache.set(cache_key_projects, projects)
             logger.info(f"Cached {len(projects)} projects")
 
@@ -842,6 +905,7 @@ async def show_current_projects(query, context):
         )
         return
 
+    # Статусы, которые считаем активными
     active_statuses = {
         'Developing': '🔄 Разработка',
         'Discussion': '💬 Публичное обсуждение',
@@ -854,9 +918,11 @@ async def show_current_projects(query, context):
         'OnApprove': '⏳ На согласовании',
         'Draft': '📝 Черновик',
         'Text': '📝 Текст проекта',
-        'PreDiscussion': '💬 Предварительное обсуждение'
+        'PreDiscussion': '💬 Предварительное обсуждение',
+        'Procedure': '🔄 Процедура'
     }
 
+    # Статусы, которые считаем завершенными
     completed_statuses = {
         'Registered': '📋 Зарегистрирован',
         'Published': '📢 Опубликован',
@@ -867,46 +933,27 @@ async def show_current_projects(query, context):
         'Completed': '✔️ Завершен'
     }
 
+    # Сначала фильтруем по подпискам
     matching_projects = []
-    today = datetime.now().date()
+    projects_to_enrich = []  # Для ВСЕХ ролей будем собирать проекты
 
     for p in projects:
         topics = p.get('classified_topics', [])
-        project_topics = set(topics)
+        project_topics = set(topics) if topics else set()
         user_topics_set = set(user_subs)
 
         if not project_topics.intersection(user_topics_set):
             continue
 
-        status = p.get('status', '')
+        p['classified_topics'] = topics
+        matching_projects.append(p)
 
-
-        is_active = False
-
-        if status in active_statuses:
-            is_active = True
-        elif not status:
-            is_active = True
-        elif status not in completed_statuses:
-            is_active = True
-
-        if is_active:
-            end_date_str = p.get('endPublicDiscussion')
-            if end_date_str:
-                try:
-                    end_date = datetime.strptime(end_date_str[:10], '%Y-%m-%d').date()
-                    if end_date < today - timedelta(days=30):
-                        is_active = False
-                except (ValueError, TypeError):
-                    pass
-
-        if is_active:
-            p['classified_topics'] = topics
-            matching_projects.append(p)
+        # Собираем ВСЕ проекты для обогащения (теперь для всех ролей)
+        projects_to_enrich.append(p)
 
     if not matching_projects:
         await query.edit_message_text(
-            "❌ Нет текущих проектов по вашим подпискам.\n\n"
+            "❌ Нет проектов по вашим подпискам.\n\n"
             "Попробуйте посмотреть архив или изменить подписки.",
             parse_mode='Markdown',
             reply_markup=InlineKeyboardMarkup([
@@ -917,36 +964,126 @@ async def show_current_projects(query, context):
         )
         return
 
-    matching_projects.sort(
-        key=lambda x: x.get('publicationDate') or x.get('creationDate', '') or '',
-        reverse=True
+    # Обогащаем проекты датами последних изменений для ВСЕХ ролей
+    await query.edit_message_text("🔍 Загружаю детальную информацию по этапам проектов...")
+
+    enriched_count = 0
+    for p in projects_to_enrich:
+        project_id = p.get('id')
+        if project_id:
+            # Сначала проверяем кеш
+            cache_key = f"last_mod_{project_id}"
+            last_modified = last_modified_cache.get(cache_key)
+
+            # Если нет в кеше, запрашиваем из API
+            if not last_modified:
+                last_modified = await get_project_last_modified(project_id)
+
+            if last_modified:
+                p['last_modified'] = last_modified
+                enriched_count += 1
+            await asyncio.sleep(0.3)  # Небольшая задержка, чтобы не нагружать API
+
+    logger.info(f"Обогащено {enriched_count} проектов датами изменений")
+
+    # ФИЛЬТРАЦИЯ ПО АКТИВНОСТИ (комбинированный подход)
+    active_projects = []
+    today = datetime.now().date()
+
+    for p in matching_projects:
+        is_active = False
+        status = p.get('status', '')
+
+        # 1. Проверяем по дате последнего изменения (самый надежный признак)
+        if p.get('last_modified'):
+            try:
+                last_mod = datetime.strptime(p['last_modified'], '%Y-%m-%d').date()
+                days_since_change = (today - last_mod).days
+                if days_since_change <= 90:  # Активен, если менялся за последние 90 дней
+                    is_active = True
+            except (ValueError, TypeError):
+                pass
+
+        # 2. Если нет даты изменения или она старая, проверяем статус
+        if not is_active:
+            if status in active_statuses:
+                is_active = True
+            elif not status:  # Пустой статус считаем активным
+                is_active = True
+            elif status not in completed_statuses:  # Неизвестный статус считаем активным
+                is_active = True
+
+        # 3. Дополнительно проверяем по дате окончания обсуждения
+        if not is_active:
+            end_date_str = p.get('endPublicDiscussion')
+            if end_date_str:
+                try:
+                    end_date = datetime.strptime(end_date_str[:10], '%Y-%m-%d').date()
+                    days_since_end = (today - end_date).days
+                    # Если обсуждение закончилось недавно (до 30 дней назад)
+                    if days_since_end <= 30:
+                        is_active = True
+                except (ValueError, TypeError):
+                    pass
+
+        # 4. Явно завершенные проекты не показываем, если они не менялись недавно
+        if status in completed_statuses:
+            if p.get('last_modified'):
+                try:
+                    last_mod = datetime.strptime(p['last_modified'], '%Y-%m-%d').date()
+                    days_since_change = (today - last_mod).days
+                    if days_since_change <= 30:  # Если менялись за последние 30 дней
+                        is_active = True
+                    else:
+                        is_active = False
+                except (ValueError, TypeError):
+                    is_active = False
+            else:
+                # Если нет даты изменения, завершенные проекты не показываем
+                is_active = False
+
+        if is_active:
+            active_projects.append(p)
+
+    if not active_projects:
+        await query.edit_message_text(
+            "❌ Нет активных проектов по вашим подпискам.\n\n"
+            "Попробуйте посмотреть архив или изменить подписки.",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🗂 Перейти в архив", callback_data="menu_archive")],
+                [InlineKeyboardButton("🔍 Изменить подписки", callback_data="menu_search")],
+                [InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")]
+            ])
+        )
+        return
+
+    # СОРТИРУЕМ ПО ДАТЕ ПОСЛЕДНЕГО ИЗМЕНЕНИЯ для ВСЕХ ролей
+    def get_sort_date(proj):
+        # Приоритет 1: дата последнего изменения (если есть)
+        if proj.get('last_modified'):
+            return proj['last_modified']
+        # Приоритет 2: дата публикации
+        pub = proj.get('publicationDate') or proj.get('creationDate', '')
+        return pub[:10] if pub else '0000-00-00'
+
+    active_projects.sort(
+        key=get_sort_date,
+        reverse=True  # Сначала новые
     )
 
-    if user_role == 'product' and len(matching_projects) > 5:
-        text = format_weekly_digest(matching_projects,
-                                    datetime.now() - timedelta(days=7),
-                                    datetime.now())
-    else:
-        text = f"📋 **Текущие проекты (активные)**\n\n"
-        text += f"📊 По вашим подпискам: **{len(matching_projects)}** проектов в работе\n\n"
-        text += "━━━━━━━━━━━━━━━━━━\n\n"
+    context.user_data['current_projects'] = active_projects
 
-        for i, p in enumerate(matching_projects, 1):
-            status = p.get('status', '')
+    title = f"📋 **Текущие активные проекты**\n📊 Сортировка по дате последнего изменения\n📅 Всего: {len(active_projects)}\n\n"
 
-
-            project_text = format_project_by_role(p, user_role)
-            text += f"**{i}.** {project_text}\n"
-    context.user_data['current_projects'] = matching_projects
     await send_projects_chunked(
         query=query,
-        projects=matching_projects,
+        projects=active_projects,
         user_role=user_role,
-        title_prefix="📋 **Текущие проекты (активные)**\n\n📊 По вашим подпискам",
+        title_prefix=title,
         start_index=0,
         chunk_size=50
     )
-
 async def show_search_menu(query, context):
     user_id = query.from_user.id
 
@@ -1190,15 +1327,21 @@ async def handle_role_selection(query, role_id):
 
 async def show_help(query):
     text = (
-         "📚 **СПРАВКА ПО БОТУ**\n\n"
-        
+        "📚 **СПРАВКА ПО БОТУ**\n\n"
+
         "🔍 **ОСНОВНЫЕ ФУНКЦИИ:**\n"
-        "• 📋 **Текущие проекты** - активные проекты по вашим подпискам(за последние 30 дней)\n"
+        "• 📋 **Текущие проекты** - активные проекты по вашим подпискам\n"
+        "  • Считаются активными, если:\n"
+        "    - менялись за последние 90 дней\n"
+        "    - ИЛИ имеют активный статус (разработка, обсуждение, ОРВ, согласование)\n"
+        "    - ИЛИ у них недавно (до 30 дней) закончилось обсуждение\n"
+        "  • Даже завершенные проекты показываются, если в них были правки за последние 30 дней\n"
+        "  • Сортировка по дате последнего изменения (самые свежие сверху)\n\n"
         "• 🔍 **Поиск по темам** - управление подписками на темы\n"
-        "• 🗂 **Архив** - все проекты по выбранной теме\n"
+        "• 🗂 **Архив** - все проекты по выбранной теме (сортировка по дате публикации)\n"
         "• ⚙️ **Настройки** - смена роли, управление подписками, время уведомлений\n"
         "• 📅 **Последние обновления** - проекты за сегодня/вчера/3/7 дней\n\n"
-        
+
         "📌 **ТЕМЫ МОНИТОРИНГА:**\n"
         "👥 **КЭДО** - кадровый электронный документооборот\n"
         "📄 **МЧД** - машиночитаемые доверенности\n"
@@ -1208,12 +1351,12 @@ async def show_help(query):
         "📊 **Отчетность** - электронная налоговая и бухгалтерская отчетность\n"
         "🔄 **B2B ЭДО** - коммерческий документооборот и роуминг\n"
         "🌐 **Экосистема** - 152-ФЗ, 125-ФЗ, хранение, архив\n\n"
-        
+
         "👤 **РОЛИ ПОЛЬЗОВАТЕЛЕЙ:**\n"
         "📊 **Аналитик** - краткие уведомления о новых проектах\n"
-        "⚖️ **Юрист** - полный обзор проектов НПА\n"
+        "⚖️ **Юрист** - полный обзор проектов НПА с детальной информацией\n"
         "📈 **Product-менеджер** - еженедельный дайджест\n\n"
-        
+
         "📊 **ЭТАПЫ ПРОЕКТОВ:**\n"
         "📝 **Text** - Текст проекта\n"
         "💬 **Discussion** - Публичное обсуждение\n"
@@ -1225,44 +1368,49 @@ async def show_help(query):
         "📢 **Publication** - Опубликован\n"
         "❌ **Cancelled** - Отменен\n"
         "✔️ **Completed** - Завершен\n\n"
-        
+
         "⏰ **ВРЕМЯ УВЕДОМЛЕНИЙ:**\n"
         "🕐 Бот использует **UTC (Всемирное координированное время)**\n"
         "🇷🇺 **Москва (UTC+3)**: вычитайте 3 часа\n"
         "• 09:00 MSK → 06:00 UTC\n"
         "• 12:00 MSK → 09:00 UTC\n"
         "• 18:00 MSK → 15:00 UTC\n\n"
-        
+
         "📋 **ДРУГИЕ ЧАСОВЫЕ ПОЯСА РФ:**\n"
         "• Калининград (UTC+2): -2 часа\n"
         "• Самара (UTC+4): -4 часа\n"
         "• Екатеринбург (UTC+5): -5 часов\n"
         "• Красноярск (UTC+7): -7 часов\n"
         "• Владивосток (UTC+10): -10 часов\n\n"
-        
+
         "ℹ️ **КАК ЭТО РАБОТАЕТ:**\n"
         "1. Нажмите '🔍 Поиск по темам' и выберите интересующие темы\n"
-        "2. Используйте '📋 Текущие проекты' для просмотра активных проектов за последние 30 дней\n"
+        "2. Используйте '📋 Текущие проекты' для просмотра активных проектов\n"
         "3. Для более детального анализа используйте '🗂 Архив' (все проекты по теме)\n"
         "4. Настройте время уведомлений в ⚙️ Настройки\n"
         "5. Получайте ежедневные уведомления о новых проектах\n\n"
-        
+
         "💡 **СОВЕТЫ:**\n"
-        "• В '📋 Текущие проекты' попадают проекты, у которых дата окончания обсуждения не старше 30 дней\n"
+        "• В '📋 Текущие проекты' попадают проекты, которые:\n"
+        "  - менялись за последние 90 дней\n"
+        "  - имеют активный статус\n"
+        "  - или недавно завершили обсуждение\n"
+        "• Дата последнего изменения загружается для всех ролей\n"
+        "• Для юриста отображается наиболее полная информация\n"
         "• Для просмотра всех проектов за период используйте '📅 Последние обновления'\n"
         "• В архиве доступны все проекты по теме, включая завершенные\n"
         "• Роль можно сменить в любой момент в настройках\n"
         "• Подписки можно редактировать через '🔍 Поиск по темам'\n\n"
-        
+
         "❓ **ПРОБЛЕМЫ:**\n"
         "• Если даты проектов не совпадают - учитывайте разницу часовых поясов (МСК vs UTC)\n"
         "• При ошибках попробуйте команду /start для перезапуска\n\n"
-        
+
         "📢 **ОБНОВЛЕНИЯ:**\n"
         "• Бот проверяет новые проекты каждый час\n"
         "• Уведомления приходят в выбранное вами время (UTC)\n"
-        "• Кеш проектов обновляется каждый час\n"
-        "• Архивный кеш обновляется ежедневно в 3:00 UTC\n"
+        "• Проекты обновляются каждый час\n"
+        "• Архив обновляется ежедневно в 3:00 UTC\n"
     )
     await query.edit_message_text(
         text,
@@ -1506,11 +1654,18 @@ async def warm_up_cache(application):
                 title=p.get('title', ''),
                 department=department
             )
+            project_id = p.get('id')
+            if project_id:
+                # Проверяем статус - для активных проектов загружаем даты
+                status = p.get('status', '')
+                active_statuses = ['Developing', 'Discussion', 'Evaluation', 'Conclusion', 'Approval']
+                if status in active_statuses:
+                    # Асинхронно загружаем в фоне
+                    asyncio.create_task(get_project_last_modified(project_id))
 
         projects_cache.set(cache_key_projects, projects)
-    if projects:
-        projects_cache.set(cache_key_projects, projects)
         logger.info(f"Кеш прогрет: {len(projects)} проектов")
+
     else:
         logger.error("Не удалось прогреть кеш")
 

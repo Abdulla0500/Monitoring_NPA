@@ -1,8 +1,13 @@
 import requests
 import math
+import logging
+
+# Добавим логирование
+logger = logging.getLogger(__name__)
 
 class RegulationAPI:
     def __init__(self):
+        self.base_url = "https://regulation.gov.ru"
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0',
@@ -14,8 +19,24 @@ class RegulationAPI:
             'Connection': 'keep-alive'
         })
 
+    # !!! ИСПРАВЛЕНО: Добавлен правильный метод для получения этапов !!!
+    def fetch_project_stages(self, project_id: str):
+        """
+        Получает этапы конкретного проекта по его ID
+        """
+        url = f"{self.base_url}/api/public/PublicProjects/GetProjectStages/{project_id}"
+
+        try:
+            logger.info(f"Запрос этапов для проекта {project_id}")
+            response = self.session.get(url, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"Ошибка получения этапов проекта {project_id}: {e}")
+            return None
+
     def fetch_projects(self, page=1, pageSize=20):
-        url = "https://regulation.gov.ru/api/public/PublicProjects/GetFiltered"
+        url = f"{self.base_url}/api/public/PublicProjects/GetFiltered"
 
         payload = {
             "listParams": {
@@ -87,6 +108,7 @@ class RegulationAPI:
         print(f"🎯 ИТОГО ЗАГРУЖЕНО: {len(projects_list)} ПРОЕКТОВ")
 
         return projects_list
+
     def fetch_all_projects(self, max_pages=500, page_size=20):
         print("=" * 70)
         print("🚀 ЗАГРУЗКА ВСЕХ ПРОЕКТОВ")
@@ -125,5 +147,3 @@ class RegulationAPI:
         print("=" * 70)
 
         return projects_list
-
-
