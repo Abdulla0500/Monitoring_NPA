@@ -548,7 +548,6 @@ async def send_projects_chunked(query, projects, user_role, title_prefix="📋 *
 
     for i, p in enumerate(current_chunk, start=start_index + 1):
         status = p.get('status', '')
-        status_emoji = get_status_emoji(status)
         project_text = format_project_by_role(p, user_role)
         text += f"**{i}.** {project_text}\n"
 
@@ -1077,8 +1076,8 @@ async def show_archive_projects(query, context, topic):
         url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
         text += f"{count}. **{TOPICS_SHORT.get(topic, topic)}**\n\n"
-        text += f"   📌 {title[:150]}...\n\n"
-        text += f"   🏢 {dept[:100]}\n\n"
+        text += f"   📌 {title}\n\n"
+        text += f"   🏢 {dept}\n\n"
 
         if stage_info:
             for line in stage_info.split('\n'):
