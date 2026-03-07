@@ -1599,23 +1599,22 @@ async def warm_up_cache(application):
 
     enriched_projects = []
 
+    # 1️⃣ сначала просто подготовим проекты
     for p in projects:
         department = p.get('developedDepartment', {}).get('description')
+
         p['classified_topics'] = ProjectClassifier.classify_as_list(
             title=p.get('title', ''),
             department=department
         )
 
-        project_id = p.get('id')
-
-        if project_id:
-            try:
-                p['last_modified'] = await get_project_last_modified(project_id)
-            except:
-                pass
-
         enriched_projects.append(p)
 
+    # 2️⃣ один раз грузим last_modified параллельно
+    logger.info("⏳ Загружаем даты изменений параллельно...")
+    await load_last_modified_parallel(enriched_projects, limit=20)
+
+    # 3️⃣ сортировка
     enriched_projects.sort(
         key=lambda x: x.get('last_modified')
         or x.get('publicationDate')
@@ -1626,7 +1625,7 @@ async def warm_up_cache(application):
 
     projects_cache.set(cache_key_projects, enriched_projects)
 
-    logger.info(f"Кеш прогрет: {len(enriched_projects)}")
+    logger.info(f"Кеш прогрет: {len(enriched_projects)} проектов")
 
     return enriched_projects
 
@@ -1778,7 +1777,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
             ]])
         )
+async def load_last_modified_parallel(projects, limit=20):
 
+    sem = asyncio.Semaphore(limit)
+
+    async def fetch(project):
+        project_id = project.get("id")
+        if not project_id:
+            return
+
+        async with sem:
+            try:
+                project["last_modified"] = await get_project_last_modified(project_id)
+            except Exception:
+                project["last_modified"] = None
+
+    tasks = [fetch(p) for p in projects]
+    await asyncio.gather(*tasks)
 
 def main():
     application = Application.builder().token(TOKEN).build()
@@ -1792,7 +1807,7 @@ def main():
     )
     scheduler.add_job(
         warm_up_cache,
-        trigger=CronTrigger(minute="2"),
+        trigger=CronTrigger(minute="20"),
         args=[application],
         id='cache_warmup',
         replace_existing=True
