@@ -1013,10 +1013,103 @@ async def show_current_projects(query, context):
     projects_with_dates = [p for p in all_projects if p.get('last_modified')]
     logger.info(f"📊 В кеше {len(all_projects)} проектов, из них {len(projects_with_dates)} с датами изменений")
 
-    # Фильтруем проекты по подпискам и активности
-    matching_projects = await filter_projects_by_subscriptions(all_projects, user_subs)
+    # Статусы для фильтрации
+    active_statuses = {
+        'Developing': '🔄 Разработка',
+        'Discussion': '💬 Публичное обсуждение',
+        'Evaluation': '📊 Оценка регулирующего воздействия',
+        'Conclusion': '📝 Подготовка заключения',
+        'Approval': '✅ Согласование',
+        'Undefined': '🔄 Разработка',
+        'Signing': '✍️ Подписание',
+        'StartDiscussion': '🆕 Начало обсуждения',
+        'OnApprove': '⏳ На согласовании',
+        'Draft': '📝 Черновик',
+        'Text': '📝 Текст проекта',
+        'PreDiscussion': '💬 Предварительное обсуждение',
+        'Procedure': '🔄 Процедура'
+    }
 
-    logger.info(f"Найдено {len(matching_projects)} активных проектов по подпискам пользователя")
+    completed_statuses = {
+        'Registered': '📋 Зарегистрирован',
+        'Published': '📢 Опубликован',
+        'Cancelled': '❌ Отменен',
+        'EndDiscussion': '✅ Обсуждение завершено',
+        'Rejected': '❌ Отклонен',
+        'Complete': '✅ Завершён',
+        'Completed': '✔️ Завершен'
+    }
+
+    # Фильтруем проекты по подпискам и АКТИВНОСТИ
+    matching_projects = []
+    today = datetime.now().date()
+
+    for p in all_projects:
+        # Проверяем подписки
+        topics = p.get('classified_topics', [])
+        if not topics or not set(topics).intersection(set(user_subs)):
+            continue
+
+        # Проверяем активность
+        is_active = False
+        status = p.get('status', '')
+
+        # 1️⃣ По дате последнего изменения (менялись за последние 90 дней)
+        if p.get('last_modified'):
+            try:
+                last_mod = datetime.strptime(p['last_modified'], '%Y-%m-%d').date()
+                days_since_change = (today - last_mod).days
+                if days_since_change <= 90:
+                    is_active = True
+                    logger.debug(f"Проект {p.get('id')} активен по дате изменения: {days_since_change} дней")
+            except (ValueError, TypeError):
+                pass
+
+        # 2️⃣ По статусу (активные статусы)
+        if not is_active:
+            if status in active_statuses:
+                is_active = True
+                logger.debug(f"Проект {p.get('id')} активен по статусу: {status}")
+            elif not status:
+                is_active = True
+                logger.debug(f"Проект {p.get('id')} активен (пустой статус)")
+            elif status not in completed_statuses:
+                is_active = True
+                logger.debug(f"Проект {p.get('id')} активен (неизвестный статус: {status})")
+
+        # 3️⃣ По дате окончания обсуждения (недавно закончилось)
+        if not is_active:
+            end_date_str = p.get('endPublicDiscussion')
+            if end_date_str:
+                try:
+                    end_date = datetime.strptime(end_date_str[:10], '%Y-%m-%d').date()
+                    days_since_end = (today - end_date).days
+                    if days_since_end <= 30:
+                        is_active = True
+                        logger.debug(f"Проект {p.get('id')} активен по дате окончания: {days_since_end} дней")
+                except (ValueError, TypeError):
+                    pass
+
+        # 4️⃣ Завершенные проекты, но недавно измененные
+        if status in completed_statuses:
+            if p.get('last_modified'):
+                try:
+                    last_mod = datetime.strptime(p['last_modified'], '%Y-%m-%d').date()
+                    days_since_change = (today - last_mod).days
+                    if days_since_change <= 30:
+                        is_active = True
+                        logger.debug(f"Завершенный проект {p.get('id')} активен по дате изменения: {days_since_change} дней")
+                    else:
+                        is_active = False
+                except (ValueError, TypeError):
+                    is_active = False
+            else:
+                is_active = False
+
+        if is_active:
+            matching_projects.append(p)
+
+    logger.info(f"Найдено {len(matching_projects)} активных проектов из {len(all_projects)}")
 
     if not matching_projects:
         await query.edit_message_text(
@@ -1031,11 +1124,11 @@ async def show_current_projects(query, context):
         )
         return
 
-    # Загружаем этапы ТОЛЬКО для отфильтрованных проектов (быстро!)
+    # Загружаем этапы ТОЛЬКО для отфильтрованных активных проектов (быстро!)
     if user_role == 'lawyer':
         projects_without_stages = [p for p in matching_projects if not p.get('stages')]
         if projects_without_stages:
-            logger.info(f"⏳ Загружаем этапы для {len(projects_without_stages)} проектов пользователя...")
+            logger.info(f"⏳ Загружаем этапы для {len(projects_without_stages)} активных проектов пользователя...")
             await load_stages_parallel(projects_without_stages, limit=10)
             logger.info(f"✅ Этапы загружены для {len(projects_without_stages)} проектов")
 
