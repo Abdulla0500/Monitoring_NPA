@@ -1,4 +1,3 @@
-
 import logging
 import asyncio
 import time
@@ -590,74 +589,42 @@ async def split_long_message_for_query(query, text, parse_mode = 'Markdown', rep
 
     return None
 
-
-async def send_projects_chunked(query, projects, user_role, title_prefix="📋 **Текущие проекты**", start_index=0,
-                                chunk_size=10, additional_data=None):
+async def send_projects_chunked(query, projects, user_role, title_prefix="📋 **Текущие проекты**", start_index=0, chunk_size=10, additional_data=None):
     total_projects = len(projects)
+    end_index = min(start_index + chunk_size, total_projects)
 
-    # Формируем заголовок
-    header = f"{title_prefix}\n\n"
-    header += f"📊 Найдено проектов: **{total_projects}**\n"
-    header += f"📄 Показано {start_index + 1}-? из {total_projects}\n\n"
-    header += "━━━━━━━━━━━━━━━━━━\n\n"
+    current_chunk = projects[start_index:end_index]
+    text = f"{title_prefix}\n\n"
+    text += f"📊 Найдено проектов: **{total_projects}**\n"
+    text += f"📄 Показано {start_index + 1}-{end_index} из {total_projects}\n\n"
+    text += "━━━━━━━━━━━━━━━━━━\n\n"
 
-    # ДИНАМИЧЕСКИ добавляем проекты, пока есть место
-    current_text = header
-    last_index = start_index
-    projects_shown = []
-
-    for idx in range(start_index, min(start_index + chunk_size * 2, total_projects)):
-        p = projects[idx]
-        project_number = idx + 1
+    for i, p in enumerate(current_chunk, start=start_index + 1):
+        status = p.get('status', '')
         project_text = format_project_by_role(p, user_role)
-        project_entry = f"**{project_number}.** {project_text}\n"
+        text += f"**{i}.** {project_text}\n"
 
-        # Проверяем, влезет ли
-        if len(current_text) + len(project_entry) > 4000:
-            logger.warning(f"⚠️ Достигнут лимит 4096 на проекте {project_number}")
-            break
-
-        current_text += project_entry
-        projects_shown.append(p)
-        last_index = idx
-
-    real_end_index = last_index + 1
-
-    # Обновляем заголовок с реальными номерами
-    current_text = current_text.replace(
-        f"Показано {start_index + 1}-?",
-        f"Показано {start_index + 1}-{real_end_index}"
-    )
-
-    # ВАЖНО: используем РЕАЛЬНЫЙ end_index для callback_data
     keyboard = []
-    if real_end_index < total_projects:
-        callback_data = f"continue_{real_end_index}"  # Не start_index + chunk_size, а реальный!
+
+    if end_index < total_projects:
+        callback_data = f"continue_{start_index + chunk_size}"
         if additional_data:
             callback_data += f"_{additional_data}"
-
-        next_end = min(real_end_index + chunk_size, total_projects)
         keyboard.append([
             InlineKeyboardButton(
-                f"▶️ Продолжить ({real_end_index + 1}-{next_end} из {total_projects})",
+                f"▶️ Продолжить ({end_index + 1}-{min(end_index + chunk_size, total_projects)} из {total_projects})",
                 callback_data=callback_data
             )
         ])
-
     keyboard.append([InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")])
 
     await split_long_message_for_query(
         query,
-        current_text,
+        text,
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-    # Логируем для отладки
-    logger.info(f"📊 Роль {user_role}: хотелось {chunk_size}, реально {len(projects_shown)} проектов")
-    logger.info(f"   Позиции: {start_index + 1}-{real_end_index}, следующий начнется с {real_end_index + 1}")
-
-    return real_end_index
 async def send_archive_chunked(query, projects, topic, start_index=0, chunk_size=50):
     total_projects = len(projects)
     end_index = min(start_index + chunk_size, total_projects)
@@ -1812,18 +1779,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-async def warm_up_last_modified_scheduler(application):
-    logger.info("🕐 Запуск плановой загрузки дат последних изменений")
-
-    cache_key_projects = get_hourly_cache_key()
-    projects = projects_cache.get(cache_key_projects)
-
-    if not projects:
-        logger.info("Нет проектов в кеше для загрузки дат")
-        return
-
-    await warm_up_last_modified_dates(projects)
-
 def main():
     application = Application.builder().token(TOKEN).build()
     scheduler = AsyncIOScheduler()
@@ -1844,7 +1799,7 @@ def main():
 
     scheduler.add_job(
         warm_up_archive_cache,
-        trigger=CronTrigger(hour=3 , minute=0),
+        trigger=CronTrigger(hour=13 , minute=50),
         args=[application],
         id='archive_cache_warmup',
         replace_existing=True
