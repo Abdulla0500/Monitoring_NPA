@@ -625,7 +625,7 @@ async def send_projects_chunked(query, projects, user_role, title_prefix="📋 *
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def send_archive_chunked(query, projects, topic, start_index=0, chunk_size=50):
+async def send_archive_chunked(query, projects, topic, start_index=0, chunk_size=20):
     total_projects = len(projects)
     end_index = min(start_index + chunk_size, total_projects)
 
@@ -646,8 +646,8 @@ async def send_archive_chunked(query, projects, topic, start_index=0, chunk_size
         url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
         text += f"{i}. **{TOPICS_SHORT.get(topic, topic)}**\n\n"
-        text += f"   📌 {title[:150]}...\n\n"
-        text += f"   🏢 {dept[:100]}\n\n"
+        text += f"   📌 {title}...\n\n"
+        text += f"   🏢 {dept}\n\n"
 
         if stage_info:
             for line in stage_info.split('\n'):
@@ -1026,7 +1026,7 @@ async def show_current_projects(query, context):
         user_role=user_role,
         title_prefix=title,
         start_index=0,
-        chunk_size=50
+        chunk_size=10
     )
 async def show_search_menu(query, context):
     user_id = query.from_user.id
@@ -1180,7 +1180,7 @@ async def show_archive_projects(query, context, topic):
         projects=filtered_projects,
         topic=topic,
         start_index=0,
-        chunk_size=50
+        chunk_size=20
     )
 
 async def show_settings_menu(query):
@@ -1651,7 +1651,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 user_role=user_role,
                 title_prefix="📋 **Текущие проекты (активные)**\n\n",
                 start_index=start_index,
-                chunk_size=50
+                chunk_size=10
             )
     elif data.startswith('continue_archive_'):
         parts = data.split('_')
@@ -1667,7 +1667,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 projects=filtered_projects,
                 topic=topic,
                 start_index=start_index,
-                chunk_size=50
+                chunk_size=20
             )
         else:
             await show_archive_projects(query, context, topic)
@@ -1807,7 +1807,7 @@ def main():
     )
     scheduler.add_job(
         warm_up_cache,
-        trigger=CronTrigger(minute="20"),
+        trigger=CronTrigger(minute="35"),
         args=[application],
         id='cache_warmup',
         replace_existing=True
@@ -1815,7 +1815,7 @@ def main():
 
     scheduler.add_job(
         warm_up_archive_cache,
-        trigger=CronTrigger(hour=13 , minute=50),
+        trigger=CronTrigger(hour=7 , minute=35),
         args=[application],
         id='archive_cache_warmup',
         replace_existing=True
