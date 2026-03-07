@@ -183,6 +183,7 @@ projects_cache = Cache(max_size=10000, ttl=90000)
 user_subs_cache = Cache(max_size=1000, ttl=36000)
 last_modified_cache = Cache(max_size=20000, ttl=86400)
 
+
 def get_user_subs_cached(user_id):
     cache_key = f"subs_{user_id}"
     subs = user_subs_cache.get(cache_key)
@@ -200,6 +201,7 @@ def invalidate_user_subs_cache(user_id):
     cache_key = f"subs_{user_id}"
     user_subs_cache.delete(cache_key)
     logger.info(f"♻️ Кеш подписок для {user_id} сброшен")
+
 
 def safe_get_date_str(date_value):
     if date_value is None:
@@ -257,6 +259,8 @@ async def get_project_last_modified(project_id: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"Ошибка получения даты изменения для проекта {project_id}: {e}")
         return None
+
+
 def format_project_stage(project):
     stage = project.get('stage', '')
     status = project.get('status', '')
@@ -392,6 +396,7 @@ async def format_project_stages_detailed(project_id: str) -> str:
         logger.error(f"Ошибка получения этапов для проекта {project_id}: {e}")
         return f"❌ Ошибка загрузки этапов: {e}"
 
+
 def format_project_lawyer(project):
     title = project.get("title", "Без названия")
     project_number = project.get("projectId", "Не указан")
@@ -462,7 +467,7 @@ def format_project_lawyer(project):
         f"📂 *Тип акта:* {project_type}\n\n"
         f"⚖ *Процедура:* {procedure}\n\n"
         f"📍 *Стадия:* {stage_ru}\n\n"
-        f"🔄 *Статус:* {status_ru}\n\n"
+        f"🔄 *Статус:* {status_ru}"
         f"{stages_text}\n"
         f"📅 *Дата публикации:* {pub_date}"
         f"{last_modified_str}\n\n"
@@ -471,6 +476,7 @@ def format_project_lawyer(project):
     )
 
     return text
+
 
 def format_project_product(project):
     title = project.get("title", "Без названия")
@@ -546,8 +552,6 @@ def format_weekly_digest(projects: List, start_date, end_date):
                 by_topic[topic] = []
             by_topic[topic].append(p)
 
-
-
     for topic, projs in by_topic.items():
         topic_name = TOPICS_SHORT.get(topic, topic)
         text += f"\n━━━━━━━ {topic_name} ━━━━━━━\n\n"
@@ -582,6 +586,7 @@ def format_weekly_digest(projects: List, start_date, end_date):
 
     text += "📌 **Рекомендации по roadmap:**\n\n"
     return text
+
 
 def format_projects_notification(projects, subs, start_date, end_date):
     from datetime import datetime
@@ -626,8 +631,8 @@ def format_projects_notification(projects, subs, start_date, end_date):
 
     return text
 
-def format_no_projects_notification(subs, start_date, end_date):
 
+def format_no_projects_notification(subs, start_date, end_date):
     if start_date == end_date:
         date_str = start_date.strftime("%d.%m.%Y")
         header = f"📅 *За {date_str} новых проектов не найдено*\n\n"
@@ -645,7 +650,8 @@ def format_no_projects_notification(subs, start_date, end_date):
 
     return header
 
-async def split_long_message_for_query(query, text, parse_mode = 'Markdown', reply_markup=None,
+
+async def split_long_message_for_query(query, text, parse_mode='Markdown', reply_markup=None,
                                        chunk_size: int = 4096):
     if len(text) <= chunk_size:
         try:
@@ -686,6 +692,7 @@ async def split_long_message_for_query(query, text, parse_mode = 'Markdown', rep
 
     return None
 
+
 async def send_projects_chunked(query, projects, user_role, title_prefix="📋 **Текущие проекты**", start_index=0,
                                 chunk_size=10, additional_data=None):
     total_projects = len(projects)
@@ -723,6 +730,8 @@ async def send_projects_chunked(query, projects, user_role, title_prefix="📋 *
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
+
 async def send_archive_chunked(query, projects, topic, start_index=0, chunk_size=20):
     total_projects = len(projects)
     end_index = min(start_index + chunk_size, total_projects)
@@ -777,6 +786,7 @@ async def send_archive_chunked(query, projects, topic, start_index=0, chunk_size
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
 async def fetch_with_retry_simple(fetch_func, max_retries=3, delay=2, *args, **kwargs):
     func_with_args = partial(fetch_func, *args, **kwargs)
     for attempt in range(1, max_retries + 1):
@@ -796,11 +806,15 @@ async def fetch_with_retry_simple(fetch_func, max_retries=3, delay=2, *args, **k
             await asyncio.sleep(wait_time)
     logger.error(f"Все {max_retries} попыток провалились")
     return None
+
+
 def get_hourly_cache_key():
     return f"projects_hourly_{datetime.now().strftime('%Y%m%d_%H')}"
 
+
 def get_archive_cache_key():
     return f"projects_archive_{datetime.now().strftime('%Y%m%d')}"
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -831,6 +845,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     await update.message.reply_text(welcome_text, parse_mode='Markdown', reply_markup=get_main_menu_keyboard())
+
 
 async def send_daily_notifications(application: Application):
     logger.info("🕐 Запуск ежедневной рассылки уведомлений")
@@ -977,7 +992,7 @@ async def show_current_projects(query, context):
         )
         return
 
-    # Получаем проекты из кеша
+    # Получаем проекты из кеша (уже с last_modified и отсортированные!)
     cache_key_projects = get_hourly_cache_key()
     all_projects = projects_cache.get(cache_key_projects)
 
@@ -998,77 +1013,10 @@ async def show_current_projects(query, context):
     projects_with_dates = [p for p in all_projects if p.get('last_modified')]
     logger.info(f"📊 В кеше {len(all_projects)} проектов, из них {len(projects_with_dates)} с датами изменений")
 
-    # Статусы для фильтрации
-    active_statuses = {
-        'Developing': '🔄 Разработка',
-        'Discussion': '💬 Публичное обсуждение',
-        'Evaluation': '📊 Оценка регулирующего воздействия',
-        'Conclusion': '📝 Подготовка заключения',
-        'Approval': '✅ Согласование',
-        'Undefined': '🔄 Разработка',
-        'Signing': '✍️ Подписание',
-        'StartDiscussion': '🆕 Начало обсуждения',
-        'OnApprove': '⏳ На согласовании',
-        'Draft': '📝 Черновик',
-        'Text': '📝 Текст проекта',
-        'PreDiscussion': '💬 Предварительное обсуждение',
-        'Procedure': '🔄 Процедура'
-    }
+    # Фильтруем проекты по подпискам и активности
+    matching_projects = await filter_projects_by_subscriptions(all_projects, user_subs)
 
-    completed_statuses = {
-        'Registered': '📋 Зарегистрирован',
-        'Published': '📢 Опубликован',
-        'Cancelled': '❌ Отменен',
-        'EndDiscussion': '✅ Обсуждение завершено',
-        'Rejected': '❌ Отклонен',
-        'Complete': '✅ Завершён',
-        'Completed': '✔️ Завершен'
-    }
-
-    # Фильтруем проекты
-    matching_projects = []
-    today = datetime.now().date()
-
-    for p in all_projects:
-        topics = p.get('classified_topics', [])
-        if not topics or not set(topics).intersection(set(user_subs)):
-            continue
-
-        is_active = False
-        status = p.get('status', '')
-
-        # Проверка активности (как в вашем коде)
-        if p.get('last_modified'):
-            try:
-                last_mod = datetime.strptime(p['last_modified'], '%Y-%m-%d').date()
-                days_since_change = (today - last_mod).days
-                if days_since_change <= 90:
-                    is_active = True
-            except (ValueError, TypeError):
-                pass
-
-        if not is_active and status in active_statuses:
-            is_active = True
-        elif not is_active and not status:
-            is_active = True
-        elif not is_active and status not in completed_statuses:
-            is_active = True
-
-        if status in completed_statuses and p.get('last_modified'):
-            try:
-                last_mod = datetime.strptime(p['last_modified'], '%Y-%m-%d').date()
-                days_since_change = (today - last_mod).days
-                if days_since_change <= 30:
-                    is_active = True
-                else:
-                    is_active = False
-            except (ValueError, TypeError):
-                is_active = False
-
-        if is_active:
-            matching_projects.append(p)
-
-    logger.info(f"Найдено {len(matching_projects)} активных проектов из {len(all_projects)}")
+    logger.info(f"Найдено {len(matching_projects)} активных проектов по подпискам пользователя")
 
     if not matching_projects:
         await query.edit_message_text(
@@ -1083,17 +1031,29 @@ async def show_current_projects(query, context):
         )
         return
 
+    # Загружаем этапы ТОЛЬКО для отфильтрованных проектов (быстро!)
+    if user_role == 'lawyer':
+        projects_without_stages = [p for p in matching_projects if not p.get('stages')]
+        if projects_without_stages:
+            logger.info(f"⏳ Загружаем этапы для {len(projects_without_stages)} проектов пользователя...")
+            await load_stages_parallel(projects_without_stages, limit=10)
+            logger.info(f"✅ Этапы загружены для {len(projects_without_stages)} проектов")
+
     context.user_data['current_projects'] = matching_projects
 
     title = f"📋 **Текущие активные проекты**\n📊 Всего: {len(matching_projects)}\n"
 
-    # Добавляем подсказку для юриста
+    # Добавляем информацию о статусе загрузки
     if user_role == 'lawyer':
-        title += "💡 *Нажмите кнопку 'Этапы N' под сообщением для детальной информации*\n\n"
+        projects_with_stages = len([p for p in matching_projects if p.get('stages')])
+        if projects_with_stages == len(matching_projects):
+            title += "📋 Все проекты с этапами\n\n"
+        else:
+            title += f"📋 Этапы загружены для {projects_with_stages} из {len(matching_projects)} проектов\n\n"
     elif projects_with_dates:
-        title += f"📅 С сортировкой по дате изменения: {len([p for p in matching_projects if p.get('last_modified')])} проектов\n\n"
+        title += f"📅 Сортировка по дате изменения: {len([p for p in matching_projects if p.get('last_modified')])} проектов\n\n"
     else:
-        title += f"📅 Сортировка по дате публикации (даты изменений загружаются в фоне)\n\n"
+        title += f"📅 Сортировка по дате публикации\n\n"
 
     await send_projects_chunked(
         query=query,
@@ -1101,8 +1061,66 @@ async def show_current_projects(query, context):
         user_role=user_role,
         title_prefix=title,
         start_index=0,
-        chunk_size=10  # Уменьшаем до 10 для удобства с кнопками
+        chunk_size=10
     )
+
+
+async def filter_projects_by_subscriptions(projects, user_subs):
+    """Фильтрует проекты по подпискам пользователя и активности"""
+    today = datetime.now().date()
+    matching_projects = []
+
+    active_statuses = {
+        'Developing', 'Discussion', 'Evaluation', 'Conclusion', 'Approval',
+        'Undefined', 'Signing', 'StartDiscussion', 'OnApprove', 'Draft',
+        'Text', 'PreDiscussion', 'Procedure'
+    }
+
+    completed_statuses = {
+        'Registered', 'Published', 'Cancelled', 'EndDiscussion',
+        'Rejected', 'Complete', 'Completed'
+    }
+
+    for p in projects:
+        # Проверяем подписки
+        topics = p.get('classified_topics', [])
+        if not topics or not set(topics).intersection(set(user_subs)):
+            continue
+
+        # Проверяем активность
+        is_active = False
+        status = p.get('status', '')
+
+        if p.get('last_modified'):
+            try:
+                last_mod = datetime.strptime(p['last_modified'], '%Y-%m-%d').date()
+                if (today - last_mod).days <= 90:
+                    is_active = True
+            except:
+                pass
+
+        if not is_active and status in active_statuses:
+            is_active = True
+        elif not is_active and not status:
+            is_active = True
+        elif not is_active and status not in completed_statuses:
+            is_active = True
+
+        if status in completed_statuses and p.get('last_modified'):
+            try:
+                last_mod = datetime.strptime(p['last_modified'], '%Y-%m-%d').date()
+                if (today - last_mod).days <= 30:
+                    is_active = True
+            except:
+                is_active = False
+
+        if is_active:
+            matching_projects.append(p)
+
+    # Проекты уже отсортированы из кеша!
+    return matching_projects
+
+
 async def show_search_menu(query, context):
     user_id = query.from_user.id
 
@@ -1178,8 +1196,8 @@ async def show_archive_projects(query, context, topic):
 
     if all_projects is None:
         all_projects = await fetch_with_retry_simple(api.fetch_all_projects_full,
-        max_retries=3,
-        delay=2)
+                                                     max_retries=3,
+                                                     delay=2)
         if all_projects:
             projects_cache.set(all_projects_cache_key, all_projects)
             logger.info(f"Cached {len(all_projects)} projects for all topics")
@@ -1192,7 +1210,6 @@ async def show_archive_projects(query, context, topic):
             ]])
         )
         return
-
 
     filtered_projects = []
     for p in all_projects:
@@ -1243,7 +1260,6 @@ async def show_archive_projects(query, context, topic):
         text += f"   🔗 {url}\n\n"
         text += "━━━━━━━━━━━━━━━━━━\n\n"
 
-
     keyboard = [
         [InlineKeyboardButton("◀️ Назад к темам", callback_data="menu_archive")],
         [InlineKeyboardButton("◀️ В главное меню", callback_data="back_to_main")]
@@ -1257,6 +1273,7 @@ async def show_archive_projects(query, context, topic):
         start_index=0,
         chunk_size=20
     )
+
 
 async def show_settings_menu(query):
     user_id = query.from_user.id
@@ -1281,7 +1298,6 @@ async def show_settings_menu(query):
         subs_text = "📋 **Текущие подписки:**\n\n" + "\n\n".join(rows) + f"\n\n📊 Всего: {len(subscriptions)} подписок\n"
     else:
         subs_text = "❌ У вас нет активных подписок\n\n"
-
 
     keyboard = [
         [InlineKeyboardButton(f"👤 Сменить роль (сейчас: {role_name})", callback_data="change_role")],
@@ -1440,8 +1456,6 @@ async def show_help(query):
     )
 
 
-
-
 async def show_time_selection(query):
     current_time = db.get_notification_time(query.from_user.id)
 
@@ -1466,6 +1480,7 @@ async def show_time_selection(query):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
 async def show_last_filter_menu(query):
     keyboard = [
         [InlineKeyboardButton("📅 Сегодня", callback_data="last_period_today")],
@@ -1481,6 +1496,7 @@ async def show_last_filter_menu(query):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
 async def show_last_scope_menu(query):
     keyboard = [
         [InlineKeyboardButton("🔥 Только мои подписки", callback_data="last_scope_mine")],
@@ -1493,6 +1509,8 @@ async def show_last_scope_menu(query):
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
+
 async def show_last_projects(query, context, period="7", scope="all"):
     await query.edit_message_text("🔍 Загружаю проекты...")
 
@@ -1652,6 +1670,7 @@ async def warm_up_archive_cache(application):
     else:
         logger.error("Ошибка прогрева архивного кеша")
 
+
 async def warm_up_cache(application):
     logger.info("🔥 Прогрев кеша проектов")
 
@@ -1662,6 +1681,7 @@ async def warm_up_cache(application):
         logger.info(f"Кеш уже прогрет: {len(cached_projects)} проектов")
         return cached_projects
 
+    # 1️⃣ Загружаем проекты
     projects = await fetch_with_retry_simple(
         api.fetch_all_projects,
         max_retries=3,
@@ -1674,35 +1694,93 @@ async def warm_up_cache(application):
 
     enriched_projects = []
 
-    # 1️⃣ сначала просто подготовим проекты
+    # 2️⃣ Классифицируем
     for p in projects:
         department = p.get('developedDepartment', {}).get('description')
-
         p['classified_topics'] = ProjectClassifier.classify_as_list(
             title=p.get('title', ''),
             department=department
         )
-
         enriched_projects.append(p)
 
-    # 2️⃣ один раз грузим last_modified параллельно
-    logger.info("⏳ Загружаем даты изменений параллельно...")
-    await load_last_modified_parallel(enriched_projects, limit=20)
+    # 3️⃣ Загружаем last_modified (быстро, из кеша)
+    logger.info("⏳ Загружаем даты изменений...")
+    await load_last_modified_parallel(enriched_projects, limit=50)
 
-    # 3️⃣ сортировка
+    # 4️⃣ СОРТИРУЕМ проекты (теперь они в нужном порядке)
     enriched_projects.sort(
         key=lambda x: x.get('last_modified')
-        or x.get('publicationDate')
-        or x.get('creationDate')
-        or '0000-00-00',
+                      or x.get('publicationDate')
+                      or x.get('creationDate')
+                      or '0000-00-00',
         reverse=True
     )
 
+    # 5️⃣ Сохраняем в кеш (БЕЗ ЭТАПОВ! Они загрузятся по запросу пользователя)
     projects_cache.set(cache_key_projects, enriched_projects)
 
-    logger.info(f"Кеш прогрет: {len(enriched_projects)} проектов")
+    logger.info(f"✅ Кеш прогрет: {len(enriched_projects)} проектов (отсортированы, без этапов)")
 
     return enriched_projects
+
+
+async def load_last_modified_parallel(projects, limit=50):
+    """Загрузка last_modified"""
+    sem = asyncio.Semaphore(limit)
+
+    async def fetch(project):
+        project_id = project.get("id")
+        if not project_id:
+            return
+
+        async with sem:
+            try:
+                project["last_modified"] = await get_project_last_modified(project_id)
+            except Exception as e:
+                logger.error(f"Ошибка загрузки last_modified для {project_id}: {e}")
+                project["last_modified"] = None
+
+    tasks = [fetch(p) for p in projects]
+    await asyncio.gather(*tasks)
+    logger.info(f"✅ Загружены даты изменений для {len(projects)} проектов")
+
+
+async def load_stages_parallel(projects, limit=10):
+    """Загрузка этапов для проектов (вызывается ТОЛЬКО для отфильтрованных проектов)"""
+    sem = asyncio.Semaphore(limit)
+
+    loaded = 0
+    total = len(projects)
+    start_time = time.time()
+
+    async def fetch_stages(project):
+        nonlocal loaded
+        project_id = project.get("id")
+        if not project_id:
+            return
+
+        async with sem:
+            try:
+                stages = await fetch_with_retry_simple(
+                    api.fetch_project_stages,
+                    max_retries=2,
+                    delay=1,
+                    project_id=project_id
+                )
+                if stages:
+                    project["stages"] = stages
+                    loaded += 1
+
+            except Exception as e:
+                logger.error(f"Ошибка загрузки этапов для {project_id}: {e}")
+
+    tasks = [fetch_stages(p) for p in projects]
+    await asyncio.gather(*tasks)
+
+    elapsed = time.time() - start_time
+    if loaded > 0:
+        logger.info(f"✅ Загружены этапы для {loaded} из {total} проектов за {elapsed:.1f} сек")
+
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1870,36 +1948,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")
             ]])
         )
-async def load_last_modified_parallel(projects, limit=20):
-    sem = asyncio.Semaphore(limit)
 
-    async def fetch_details(project):
-        project_id = project.get("id")
-        if not project_id:
-            return
-
-        async with sem:
-            try:
-                # Загружаем last_modified
-                project["last_modified"] = await get_project_last_modified(project_id)
-
-                # Загружаем этапы
-                stages = await fetch_with_retry_simple(
-                    api.fetch_project_stages,
-                    max_retries=2,
-                    delay=1,
-                    project_id=project_id
-                )
-                if stages:
-                    project["stages"] = stages
-
-            except Exception as e:
-                logger.error(f"Ошибка загрузки деталей для проекта {project_id}: {e}")
-                project["last_modified"] = None
-                project["stages"] = None
-
-    tasks = [fetch_details(p) for p in projects]
-    await asyncio.gather(*tasks)
 
 def main():
     application = Application.builder().token(TOKEN).build()
@@ -1913,7 +1962,7 @@ def main():
     )
     scheduler.add_job(
         warm_up_cache,
-        trigger=CronTrigger(minute="47"),
+        trigger=CronTrigger(minute="20"),
         args=[application],
         id='cache_warmup',
         replace_existing=True
@@ -1921,12 +1970,11 @@ def main():
 
     scheduler.add_job(
         warm_up_archive_cache,
-        trigger=CronTrigger(hour=7 , minute=35),
+        trigger=CronTrigger(hour=7, minute=35),
         args=[application],
         id='archive_cache_warmup',
         replace_existing=True
     )
-
 
     scheduler.start()
     logger.info("⏰ Планировщик уведомлений запущен (проверка каждую минуту)")
@@ -1944,6 +1992,7 @@ def main():
         logger.info("🛑 Бот останавливается...")
         scheduler.shutdown()
         logger.info("👋 Планировщик остановлен")
+
 
 if __name__ == "__main__":
     main()
