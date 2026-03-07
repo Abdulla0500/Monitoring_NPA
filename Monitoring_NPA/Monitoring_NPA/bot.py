@@ -392,8 +392,7 @@ async def format_project_stages_detailed(project_id: str) -> str:
         logger.error(f"Ошибка получения этапов для проекта {project_id}: {e}")
         return f"❌ Ошибка загрузки этапов: {e}"
 
-
-def format_project_lawyer(project, include_button=True):
+async def format_project_lawyer(project):
     title = project.get("title", "Без названия")
     project_number = project.get("projectId", "Не указан")
     department = project.get("developedDepartment", {}).get("description", "Не указано")
@@ -439,6 +438,19 @@ def format_project_lawyer(project, include_button=True):
         if last_modified else ""
     )
 
+    # ПОЛУЧАЕМ ЭТАПЫ ПРОЕКТА (если они уже загружены)
+    stages_text = ""
+    if project.get('stages'):
+        stages = project['stages']
+        stages_text = "\n\n📊 **Этапы проекта:**\n"
+        for s in stages:
+            title_stage = s.get('title', '')
+            is_current = s.get('isCurrent', False)
+            if is_current:
+                stages_text += f"└ 🔴 **{title_stage}** (текущий)\n"
+            else:
+                stages_text += f"└ {title_stage}\n"
+
     url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
     text = (
@@ -451,16 +463,12 @@ def format_project_lawyer(project, include_button=True):
         f"⚖ *Процедура:* {procedure}\n\n"
         f"📍 *Стадия:* {stage_ru}\n\n"
         f"🔄 *Статус:* {status_ru}\n\n"
+        f"{stages_text}\n"
         f"📅 *Дата публикации:* {pub_date}"
         f"{last_modified_str}\n\n"
         f"🔗 {url}\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
     )
-
-    # Добавляем информацию о наличии этапов и кнопку
-    if include_button:
-        text += "📋 *Для просмотра детальных этапов нажмите кнопку ниже*\n\n"
-
-    text += "━━━━━━━━━━━━━━━━━━\n\n"
 
     return text
 
@@ -678,7 +686,6 @@ async def split_long_message_for_query(query, text, parse_mode = 'Markdown', rep
 
     return None
 
-
 async def send_projects_chunked(query, projects, user_role, title_prefix="📋 **Текущие проекты**", start_index=0,
                                 chunk_size=10, additional_data=None):
     total_projects = len(projects)
@@ -696,7 +703,7 @@ async def send_projects_chunked(query, projects, user_role, title_prefix="📋 *
 
     keyboard = []
 
-    # Кнопки для пагинации
+    # ТОЛЬКО кнопки для пагинации
     if end_index < total_projects:
         callback_data = f"continue_{start_index + chunk_size}"
         if additional_data:
@@ -707,36 +714,6 @@ async def send_projects_chunked(query, projects, user_role, title_prefix="📋 *
                 callback_data=callback_data
             )
         ])
-
-    # Для юриста добавляем кнопки "Подробнее" к каждому проекту в чанке
-    if user_role == 'lawyer' and current_chunk:
-        stages_row = []
-        for idx, p in enumerate(current_chunk[:5]):  # Максимум 5 кнопок в ряд
-            project_id = p.get('id')
-            project_num = start_index + idx + 1
-            stages_row.append(
-                InlineKeyboardButton(
-                    f"📋 Этапы {project_num}",
-                    callback_data=f"stages_{project_id}_{project_num}"
-                )
-            )
-        if stages_row:
-            keyboard.append(stages_row)
-
-        # Если проектов больше 5, добавляем вторую строку
-        if len(current_chunk) > 5:
-            stages_row2 = []
-            for idx, p in enumerate(current_chunk[5:10], start=5):
-                project_id = p.get('id')
-                project_num = start_index + idx + 1
-                stages_row2.append(
-                    InlineKeyboardButton(
-                        f"📋 Этапы {project_num}",
-                        callback_data=f"stages_{project_id}_{project_num}"
-                    )
-                )
-            if stages_row2:
-                keyboard.append(stages_row2)
 
     keyboard.append([InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")])
 
@@ -1751,31 +1728,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 start_index=start_index,
                 chunk_size=10
             )
-    elif data.startswith('stages_'):
-        parts = data.split('_')
-        project_id = parts[1]
-        project_num = parts[2]
-
-        await query.edit_message_text(f"🔍 Загружаю детальную информацию по этапам проекта #{project_num}...")
-
-        # Получаем детальную информацию по этапам
-        stages_text = await format_project_stages_detailed(project_id)
-
-        # Добавляем кнопку "Назад"
-        keyboard = [[
-            InlineKeyboardButton("◀️ Назад к проектам", callback_data="back_to_projects")
-        ]]
-
-        # Сохраняем контекст для возврата
-        context.user_data['last_view'] = 'current_projects'
-
-        await split_long_message_for_query(
-            query,
-            stages_text,
-            parse_mode='Markdown',
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-
     elif data == "back_to_projects":
         # Возвращаемся к списку проектов
         user_role = db.get_user_role(query.from_user.id)
@@ -1919,21 +1871,34 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]])
         )
 async def load_last_modified_parallel(projects, limit=20):
-
     sem = asyncio.Semaphore(limit)
 
-    async def fetch(project):
+    async def fetch_details(project):
         project_id = project.get("id")
         if not project_id:
             return
 
         async with sem:
             try:
+                # Загружаем last_modified
                 project["last_modified"] = await get_project_last_modified(project_id)
-            except Exception:
-                project["last_modified"] = None
 
-    tasks = [fetch(p) for p in projects]
+                # Загружаем этапы
+                stages = await fetch_with_retry_simple(
+                    api.fetch_project_stages,
+                    max_retries=2,
+                    delay=1,
+                    project_id=project_id
+                )
+                if stages:
+                    project["stages"] = stages
+
+            except Exception as e:
+                logger.error(f"Ошибка загрузки деталей для проекта {project_id}: {e}")
+                project["last_modified"] = None
+                project["stages"] = None
+
+    tasks = [fetch_details(p) for p in projects]
     await asyncio.gather(*tasks)
 
 def main():
@@ -1948,7 +1913,7 @@ def main():
     )
     scheduler.add_job(
         warm_up_cache,
-        trigger=CronTrigger(minute="4"),
+        trigger=CronTrigger(minute="34"),
         args=[application],
         id='cache_warmup',
         replace_existing=True

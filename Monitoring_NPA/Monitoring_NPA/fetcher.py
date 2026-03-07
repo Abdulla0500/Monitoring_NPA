@@ -70,15 +70,6 @@ class RegulationAPI:
             print(f"   ❌ Ошибка: {e}")
             return [], 0
 
-    def wrap_text(self, text, width=60):
-        if not text:
-            return text
-
-        lines = []
-        for i in range(0, len(text), width):
-            lines.append(text[i:i + width])
-        return '\n'.join(lines)
-
     def fetch_all_projects_full(self, page_size=20):
         print("=" * 70)
         print("🗂 ПОЛНАЯ ЗАГРУЗКА ВСЕХ ПРОЕКТОВ (ARCHIVE)")
@@ -129,11 +120,9 @@ class RegulationAPI:
         print(f"\n📊 Всего проектов в API: {total_count}")
         print(f"📄 Всего страниц: {total_pages}")
 
-        pages_to_load = min(total_pages, max_pages)
+        print(f"📥 Будем загружать: {max_pages} страниц\n")
 
-        print(f"📥 Будем загружать: {pages_to_load} страниц\n")
-
-        for page in range(2, pages_to_load + 1):
+        for page in range(2, max_pages + 1):
             projects, _ = self.fetch_projects(page=page, pageSize=page_size)
 
             all_projects.extend(projects)
