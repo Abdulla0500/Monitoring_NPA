@@ -1626,9 +1626,46 @@ async def warm_up_cache(application):
     projects_cache.set(cache_key_projects, enriched_projects)
     logger.info(f"Кеш прогрет: {len(enriched_projects)} проектов (отсортированы по дате публикации)")
 
-
+    asyncio.create_task(load_missing_dates(enriched_projects))
     return enriched_projects
 
+
+async def load_missing_dates(projects):
+    """Загружает отсутствующие даты изменений"""
+    logger.info(f"📅 Загрузка отсутствующих дат изменений для {len(projects)} проектов...")
+
+    loaded = 0
+    for p in projects:
+        if p.get('last_modified'):
+            continue  # Уже есть дата
+
+        project_id = p.get('id')
+        if not project_id:
+            continue
+
+        try:
+            last_modified = await get_project_last_modified(project_id)
+            if last_modified:
+                p['last_modified'] = last_modified
+                loaded += 1
+
+            await asyncio.sleep(0.3)  # Защита API
+
+        except Exception as e:
+            logger.error(f"Ошибка загрузки даты для {project_id}: {e}")
+
+    logger.info(f"📊 Загружено {loaded} новых дат")
+
+    # Пересортировываем если были загружены новые даты
+    if loaded > 0:
+        projects.sort(
+            key=lambda x: x.get('last_modified') or x.get('publicationDate') or x.get('creationDate',
+                                                                                      '') or '0000-00-00',
+            reverse=True
+        )
+        cache_key = get_hourly_cache_key()
+        projects_cache.set(cache_key, projects)
+        logger.info("🔄 Кеш пересортирован с учетом новых дат")
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1791,7 +1828,7 @@ def main():
     )
     scheduler.add_job(
         warm_up_cache,
-        trigger=CronTrigger(minute="10"),
+        trigger=CronTrigger(minute="16"),
         args=[application],
         id='cache_warmup',
         replace_existing=True
