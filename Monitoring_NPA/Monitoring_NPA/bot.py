@@ -1611,7 +1611,6 @@ async def warm_up_cache(application):
         if project_id:
             try:
                 p['last_modified'] = await get_project_last_modified(project_id)
-                await asyncio.sleep(0.25)
             except:
                 pass
 
@@ -1793,7 +1792,7 @@ def main():
     )
     scheduler.add_job(
         warm_up_cache,
-        trigger=CronTrigger(minute="37"),
+        trigger=CronTrigger(minute="0"),
         args=[application],
         id='cache_warmup',
         replace_existing=True
