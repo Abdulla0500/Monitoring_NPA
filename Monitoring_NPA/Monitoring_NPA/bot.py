@@ -326,34 +326,118 @@ def format_project_analyst(project):
     return text
 
 
-def format_project_lawyer(project):
+async def format_project_stages_detailed(project_id: str) -> str:
+    """
+    Получает и форматирует детальную информацию по этапам проекта
+    """
+    try:
+        stages = await fetch_with_retry_simple(
+            api.fetch_project_stages,
+            max_retries=2,
+            delay=1,
+            project_id=project_id
+        )
+
+        if not stages:
+            return "❌ Информация об этапах не найдена"
+
+        text = "📊 **ДЕТАЛЬНАЯ ИНФОРМАЦИЯ ПО ЭТАПАМ**\n\n"
+
+        for stage in stages:
+            # Название этапа
+            title = stage.get('title', 'Этап')
+            text += f"**{title}**\n"
+
+            # Статус этапа
+            if stage.get('isCurrent'):
+                text += "└ 🔴 **Текущий этап**\n"
+            if stage.get('isCompleted'):
+                text += "└ ✅ **Завершен**\n"
+
+            # Информация о файлах
+            if stage.get('file'):
+                file = stage['file']
+                text += f"└ 📄 **Файл:** {file.get('name', 'Без названия')}\n"
+                if file.get('date'):
+                    text += f"└ 📅 Дата: {file['date'][:10]}\n"
+                if file.get('url'):
+                    text += f"└ 🔗 [Скачать]({file['url']})\n"
+
+            # Информация об измененных файлах
+            if stage.get('modifiedFile'):
+                mfile = stage['modifiedFile']
+                text += f"└ 📝 **Измененный файл:** {mfile.get('name', 'Без названия')}\n"
+                if mfile.get('date'):
+                    text += f"└ 📅 Дата изменения: {mfile['date'][:10]}\n"
+                if mfile.get('url'):
+                    text += f"└ 🔗 [Скачать]({mfile['url']})\n"
+
+            # Информация о документах
+            if stage.get('documents'):
+                text += f"└ 📑 Документов: {len(stage['documents'])}\n"
+
+            # Информация о голосовании
+            if stage.get('vote'):
+                vote = stage['vote']
+                text += f"└ 🗳 **Голосование:**\n"
+                text += f"  └ За: {vote.get('for', 0)}, Против: {vote.get('against', 0)}\n"
+                if vote.get('endDate'):
+                    text += f"  └ Завершается: {vote['endDate'][:10]}\n"
+
+            text += "\n" + "─" * 40 + "\n\n"
+
+        return text
+
+    except Exception as e:
+        logger.error(f"Ошибка получения этапов для проекта {project_id}: {e}")
+        return f"❌ Ошибка загрузки этапов: {e}"
+
+
+def format_project_lawyer(project, include_button=True):
     title = project.get("title", "Без названия")
     project_number = project.get("projectId", "Не указан")
     department = project.get("developedDepartment", {}).get("description", "Не указано")
+
     project_type_id = project.get("projectType", {}).get("id", "")
-    project_type = PROJECT_TYPES.get(project_type_id, project.get("projectType", {}).get("description", "Не указано"))
+    project_type = PROJECT_TYPES.get(
+        project_type_id,
+        project.get("projectType", {}).get("description", "Не указано")
+    )
+
     procedure_id = project.get("procedure", {}).get("id", "")
-    procedure = PROCEDURE_TYPES.get(procedure_id, project.get("procedure", {}).get("description", "Не указано"))
+    procedure = PROCEDURE_TYPES.get(
+        procedure_id,
+        project.get("procedure", {}).get("description", "Не указано")
+    )
+
     stage = project.get("stage", "Не указано")
     stage_ru = STAGE_DESCRIPTIONS.get(stage, stage)
+
     status = project.get("status", "Не указано")
     status_ru = STATUS_DESCRIPTIONS.get(status, status)
+
     pub_date = project.get("publicationDate") or project.get("creationDate")
     project_id = project.get("id")
+
     topics = project.get("classified_topics", [])
-
-    # Получаем дату последнего изменения из этапов (если есть)
     last_modified = project.get("last_modified")
-    last_modified_str = f"\n\n📅 *Последнее изменение:* {last_modified}" if last_modified else ""
 
+    # Тематики
     if topics:
         topic_labels = [TOPICS.get(t, t) for t in topics]
         topic_str = ", ".join(topic_labels)
     else:
         topic_str = "НПА"
 
+    # Дата публикации
     if pub_date:
         pub_date = pub_date[:10]
+
+    # Последнее изменение
+    last_modified_str = (
+        f"\n\n📅 *Последнее изменение:* {last_modified}"
+        if last_modified else ""
+    )
 
     url = f"https://regulation.gov.ru/projects#npa={project_id}"
 
@@ -367,13 +451,18 @@ def format_project_lawyer(project):
         f"⚖ *Процедура:* {procedure}\n\n"
         f"📍 *Стадия:* {stage_ru}\n\n"
         f"🔄 *Статус:* {status_ru}\n\n"
-        f"📅 *Дата публикации:* {pub_date}{last_modified_str}\n\n"
+        f"📅 *Дата публикации:* {pub_date}"
+        f"{last_modified_str}\n\n"
         f"🔗 {url}\n\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
     )
 
-    return text
+    # Добавляем информацию о наличии этапов и кнопку
+    if include_button:
+        text += "📋 *Для просмотра детальных этапов нажмите кнопку ниже*\n\n"
 
+    text += "━━━━━━━━━━━━━━━━━━\n\n"
+
+    return text
 
 def format_project_product(project):
     title = project.get("title", "Без названия")
@@ -589,7 +678,9 @@ async def split_long_message_for_query(query, text, parse_mode = 'Markdown', rep
 
     return None
 
-async def send_projects_chunked(query, projects, user_role, title_prefix="📋 **Текущие проекты**", start_index=0, chunk_size=10, additional_data=None):
+
+async def send_projects_chunked(query, projects, user_role, title_prefix="📋 **Текущие проекты**", start_index=0,
+                                chunk_size=10, additional_data=None):
     total_projects = len(projects)
     end_index = min(start_index + chunk_size, total_projects)
 
@@ -600,12 +691,12 @@ async def send_projects_chunked(query, projects, user_role, title_prefix="📋 *
     text += "━━━━━━━━━━━━━━━━━━\n\n"
 
     for i, p in enumerate(current_chunk, start=start_index + 1):
-        status = p.get('status', '')
         project_text = format_project_by_role(p, user_role)
         text += f"**{i}.** {project_text}\n"
 
     keyboard = []
 
+    # Кнопки для пагинации
     if end_index < total_projects:
         callback_data = f"continue_{start_index + chunk_size}"
         if additional_data:
@@ -616,6 +707,37 @@ async def send_projects_chunked(query, projects, user_role, title_prefix="📋 *
                 callback_data=callback_data
             )
         ])
+
+    # Для юриста добавляем кнопки "Подробнее" к каждому проекту в чанке
+    if user_role == 'lawyer' and current_chunk:
+        stages_row = []
+        for idx, p in enumerate(current_chunk[:5]):  # Максимум 5 кнопок в ряд
+            project_id = p.get('id')
+            project_num = start_index + idx + 1
+            stages_row.append(
+                InlineKeyboardButton(
+                    f"📋 Этапы {project_num}",
+                    callback_data=f"stages_{project_id}_{project_num}"
+                )
+            )
+        if stages_row:
+            keyboard.append(stages_row)
+
+        # Если проектов больше 5, добавляем вторую строку
+        if len(current_chunk) > 5:
+            stages_row2 = []
+            for idx, p in enumerate(current_chunk[5:10], start=5):
+                project_id = p.get('id')
+                project_num = start_index + idx + 1
+                stages_row2.append(
+                    InlineKeyboardButton(
+                        f"📋 Этапы {project_num}",
+                        callback_data=f"stages_{project_id}_{project_num}"
+                    )
+                )
+            if stages_row2:
+                keyboard.append(stages_row2)
+
     keyboard.append([InlineKeyboardButton("◀️ Назад в меню", callback_data="back_to_main")])
 
     await split_long_message_for_query(
@@ -624,7 +746,6 @@ async def send_projects_chunked(query, projects, user_role, title_prefix="📋 *
         parse_mode='Markdown',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-
 async def send_archive_chunked(query, projects, topic, start_index=0, chunk_size=20):
     total_projects = len(projects)
     end_index = min(start_index + chunk_size, total_projects)
@@ -858,6 +979,8 @@ async def send_daily_notifications(application: Application):
             logger.error(f"Ошибка отправки пользователю {user_id}: {e}")
 
     logger.info(f"Рассылка завершена. Отправлено: {sent_count}")
+
+
 async def show_current_projects(query, context):
     await query.edit_message_text("🔍 Загружаю текущие проекты по вашим подпискам...")
 
@@ -877,14 +1000,13 @@ async def show_current_projects(query, context):
         )
         return
 
-    # Получаем проекты из кеша (уже отсортированные!)
+    # Получаем проекты из кеша
     cache_key_projects = get_hourly_cache_key()
     all_projects = projects_cache.get(cache_key_projects)
 
     if all_projects is None:
-        # Если кеша нет, загружаем через warm_up_cache
         logger.info("Кеш пуст, загружаем проекты...")
-        all_projects = await warm_up_cache(context.application)  # <--- Добавлен await
+        all_projects = await warm_up_cache(context.application)
 
     if not all_projects:
         await query.edit_message_text(
@@ -895,11 +1017,11 @@ async def show_current_projects(query, context):
         )
         return
 
-    # Логируем статистику по last_modified
+    # Логируем статистику
     projects_with_dates = [p for p in all_projects if p.get('last_modified')]
     logger.info(f"📊 В кеше {len(all_projects)} проектов, из них {len(projects_with_dates)} с датами изменений")
 
-    # Статусы, которые считаем активными
+    # Статусы для фильтрации
     active_statuses = {
         'Developing': '🔄 Разработка',
         'Discussion': '💬 Публичное обсуждение',
@@ -916,7 +1038,6 @@ async def show_current_projects(query, context):
         'Procedure': '🔄 Процедура'
     }
 
-    # Статусы, которые считаем завершенными
     completed_statuses = {
         'Registered': '📋 Зарегистрирован',
         'Published': '📢 Опубликован',
@@ -927,70 +1048,44 @@ async def show_current_projects(query, context):
         'Completed': '✔️ Завершен'
     }
 
-    # Фильтруем по подпискам и активности
+    # Фильтруем проекты
     matching_projects = []
     today = datetime.now().date()
 
     for p in all_projects:
-        # Проверяем подписки
         topics = p.get('classified_topics', [])
         if not topics or not set(topics).intersection(set(user_subs)):
             continue
 
-        # Проверяем активность
         is_active = False
         status = p.get('status', '')
 
-        # 1. По дате последнего изменения
+        # Проверка активности (как в вашем коде)
         if p.get('last_modified'):
             try:
                 last_mod = datetime.strptime(p['last_modified'], '%Y-%m-%d').date()
                 days_since_change = (today - last_mod).days
                 if days_since_change <= 90:
                     is_active = True
-                    logger.debug(f"Проект {p.get('id')} активен по дате изменения: {days_since_change} дней")
-            except (ValueError, TypeError) as e:
-                logger.debug(f"Ошибка парсинга даты {p.get('last_modified')}: {e}")
+            except (ValueError, TypeError):
+                pass
 
-        # 2. По статусу
-        if not is_active:
-            if status in active_statuses:
-                is_active = True
-                logger.debug(f"Проект {p.get('id')} активен по статусу: {status}")
-            elif not status:
-                is_active = True
-                logger.debug(f"Проект {p.get('id')} активен (пустой статус)")
-            elif status not in completed_statuses:
-                is_active = True
-                logger.debug(f"Проект {p.get('id')} активен (неизвестный статус: {status})")
+        if not is_active and status in active_statuses:
+            is_active = True
+        elif not is_active and not status:
+            is_active = True
+        elif not is_active and status not in completed_statuses:
+            is_active = True
 
-        # 3. По дате окончания обсуждения
-        if not is_active:
-            end_date_str = p.get('endPublicDiscussion')
-            if end_date_str:
-                try:
-                    end_date = datetime.strptime(end_date_str[:10], '%Y-%m-%d').date()
-                    days_since_end = (today - end_date).days
-                    if days_since_end <= 30:
-                        is_active = True
-                        logger.debug(f"Проект {p.get('id')} активен по дате окончания: {days_since_end} дней")
-                except (ValueError, TypeError):
-                    pass
-
-        # 4. Проверка завершенных проектов
-        if status in completed_statuses:
-            if p.get('last_modified'):
-                try:
-                    last_mod = datetime.strptime(p['last_modified'], '%Y-%m-%d').date()
-                    days_since_change = (today - last_mod).days
-                    if days_since_change <= 30:
-                        is_active = True
-                        logger.debug(f"Завершенный проект {p.get('id')} активен по дате изменения: {days_since_change} дней")
-                    else:
-                        is_active = False
-                except (ValueError, TypeError):
+        if status in completed_statuses and p.get('last_modified'):
+            try:
+                last_mod = datetime.strptime(p['last_modified'], '%Y-%m-%d').date()
+                days_since_change = (today - last_mod).days
+                if days_since_change <= 30:
+                    is_active = True
+                else:
                     is_active = False
-            else:
+            except (ValueError, TypeError):
                 is_active = False
 
         if is_active:
@@ -1011,11 +1106,14 @@ async def show_current_projects(query, context):
         )
         return
 
-    # Проекты УЖЕ ОТСОРТИРОВАНЫ из кеша, дополнительная сортировка не нужна!
     context.user_data['current_projects'] = matching_projects
 
     title = f"📋 **Текущие активные проекты**\n📊 Всего: {len(matching_projects)}\n"
-    if projects_with_dates:
+
+    # Добавляем подсказку для юриста
+    if user_role == 'lawyer':
+        title += "💡 *Нажмите кнопку 'Этапы N' под сообщением для детальной информации*\n\n"
+    elif projects_with_dates:
         title += f"📅 С сортировкой по дате изменения: {len([p for p in matching_projects if p.get('last_modified')])} проектов\n\n"
     else:
         title += f"📅 Сортировка по дате публикации (даты изменений загружаются в фоне)\n\n"
@@ -1026,7 +1124,7 @@ async def show_current_projects(query, context):
         user_role=user_role,
         title_prefix=title,
         start_index=0,
-        chunk_size=10
+        chunk_size=10  # Уменьшаем до 10 для удобства с кнопками
     )
 async def show_search_menu(query, context):
     user_id = query.from_user.id
@@ -1653,6 +1751,49 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 start_index=start_index,
                 chunk_size=10
             )
+    elif data.startswith('stages_'):
+        parts = data.split('_')
+        project_id = parts[1]
+        project_num = parts[2]
+
+        await query.edit_message_text(f"🔍 Загружаю детальную информацию по этапам проекта #{project_num}...")
+
+        # Получаем детальную информацию по этапам
+        stages_text = await format_project_stages_detailed(project_id)
+
+        # Добавляем кнопку "Назад"
+        keyboard = [[
+            InlineKeyboardButton("◀️ Назад к проектам", callback_data="back_to_projects")
+        ]]
+
+        # Сохраняем контекст для возврата
+        context.user_data['last_view'] = 'current_projects'
+
+        await split_long_message_for_query(
+            query,
+            stages_text,
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif data == "back_to_projects":
+        # Возвращаемся к списку проектов
+        user_role = db.get_user_role(query.from_user.id)
+        matching_projects = context.user_data.get('current_projects', [])
+
+        if matching_projects:
+            title = f"📋 **Текущие активные проекты**\n📊 Всего: {len(matching_projects)}\n\n"
+
+            await send_projects_chunked(
+                query=query,
+                projects=matching_projects,
+                user_role=user_role,
+                title_prefix=title,
+                start_index=0,
+                chunk_size=10
+            )
+        else:
+            await show_current_projects(query, context)
     elif data.startswith('continue_archive_'):
         parts = data.split('_')
         topic = parts[2]
