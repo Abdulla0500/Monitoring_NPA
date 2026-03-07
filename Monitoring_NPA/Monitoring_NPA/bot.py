@@ -392,7 +392,7 @@ async def format_project_stages_detailed(project_id: str) -> str:
         logger.error(f"Ошибка получения этапов для проекта {project_id}: {e}")
         return f"❌ Ошибка загрузки этапов: {e}"
 
-async def format_project_lawyer(project):
+def format_project_lawyer(project):
     title = project.get("title", "Без названия")
     project_number = project.get("projectId", "Не указан")
     department = project.get("developedDepartment", {}).get("description", "Не указано")
@@ -1913,7 +1913,7 @@ def main():
     )
     scheduler.add_job(
         warm_up_cache,
-        trigger=CronTrigger(minute="34"),
+        trigger=CronTrigger(minute="47"),
         args=[application],
         id='cache_warmup',
         replace_existing=True
