@@ -2055,7 +2055,7 @@ def main():
     )
     scheduler.add_job(
         warm_up_cache,
-        trigger=CronTrigger(minute="20"),
+        trigger=CronTrigger(minute="0"),
         args=[application],
         id='cache_warmup',
         replace_existing=True
@@ -2063,7 +2063,7 @@ def main():
 
     scheduler.add_job(
         warm_up_archive_cache,
-        trigger=CronTrigger(hour=7, minute=35),
+        trigger=CronTrigger(hour=4, minute=0),
         args=[application],
         id='archive_cache_warmup',
         replace_existing=True
